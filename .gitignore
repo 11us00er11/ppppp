@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+*.log
+
+# Flutter
+.dart_tool/
+.packages
+.pub/
+build/
+.idea/
+android/.gradle
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
