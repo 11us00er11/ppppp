@@ -1,4 +1,5 @@
 flask
-openai
 flask-cors
+pymysql
 python-dotenv
+flask-jwt-extended

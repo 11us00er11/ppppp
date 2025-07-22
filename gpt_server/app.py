@@ -2,6 +2,8 @@ from flask import Flask
 from flask_cors import CORS
 from routes.chat import chat_bp
 from config import load_env
+from routes.auth import auth_bp
+from routes.diary import diary_bp
 import logging
 
 logging.basicConfig(
@@ -17,9 +19,14 @@ load_env()
 
 app = Flask(__name__)
 CORS(app)
+app.config['JWT_SECRET_KEY'] = SECRET_KEY
+jwt = JWTManager(app)
 
 # 블루프린트 등록
 app.register_blueprint(chat_bp)
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(diary_bp, url_prefix="/api/diary")
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
