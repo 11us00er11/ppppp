@@ -1,16 +1,5 @@
-# heartware
+# 마음톡 (HeartTalk) 💬🧠
 
-A new Flutter project.
+AI 기반 감정일기 챗봇 앱으로, 사용자의 감정 상태를 기록하고 위로와 조언을 제공하는 정신 건강 지원 서비스입니다.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Flutter로 개발된 모바일 앱과 Flask 기반 GPT 서버를 통해 실시간 감정 분석 및 기록이 가능합니다.
