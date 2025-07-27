@@ -46,13 +46,34 @@ class _SurveyScreenState extends State<SurveyScreen> {
       _totalScore = totalScore;
     });
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(initialMessage: message),
+    // 사용자에게 챗봇 시작 여부 묻기
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("챗봇과 대화하시겠어요?"),
+        content: Text("진단 결과에 기반한 위로를 받아보실 수 있습니다."),
+        actions: [
+          TextButton(
+            child: Text("아니오"),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          TextButton(
+            child: Text("예"),
+            onPressed: () {
+              Navigator.of(context).pop(); // 다이얼로그 닫기
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChatScreen(initialMessage: message),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

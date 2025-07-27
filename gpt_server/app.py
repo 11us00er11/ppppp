@@ -27,6 +27,5 @@ app.register_blueprint(chat_bp)
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(diary_bp, url_prefix="/api/diary")
 
-
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
