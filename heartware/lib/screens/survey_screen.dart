@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'chat_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
+  final int userId;
+  SurveyScreen({required this.userId});
   @override
   _SurveyScreenState createState() => _SurveyScreenState();
 }

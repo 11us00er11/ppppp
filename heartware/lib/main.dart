@@ -3,6 +3,7 @@ import 'screens/intro_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/survey_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/login_screen.dart';
 
 void main() {
   runApp(MindTalkApp());
@@ -19,11 +20,11 @@ class MindTalkApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
       ),
       debugShowCheckedModeBanner: false,
-      initialRoute: '/',
+      initialRoute: '/login',
       routes: {
+        '/login': (context) => LoginScreen(),
         '/': (context) => IntroScreen(),
         '/chat': (context) => ChatScreen(),
-        '/survey': (context) => SurveyScreen(),
         '/history': (context) => HistoryScreen(),
       },
     );
