@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/intro_screen.dart';
 import 'screens/chat_screen.dart';
-import 'screens/survey_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/login_screen.dart';
 
@@ -22,8 +21,8 @@ class MindTalkApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       initialRoute: '/login',
       routes: {
-        '/login': (context) => LoginScreen(),
-        '/': (context) => IntroScreen(),
+        '/': (context) => LoginScreen(),
+        '/intro': (context) => IntroScreen(),
         '/chat': (context) => ChatScreen(),
         '/history': (context) => HistoryScreen(),
       },

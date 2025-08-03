@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'survey_screen.dart';
-import 'signup_screen.dart';
+import 'login_screen.dart';
 
-class LoginScreen extends StatefulWidget {
+class SignupScreen extends StatefulWidget {
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  _SignupScreenState createState() => _SignupScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignupScreenState extends State<SignupScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-
   bool _isLoading = false;
 
-  Future<void> _login() async {
+  Future<void> _signup() async {
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -26,12 +24,10 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     final response = await http.post(
-      Uri.parse("http://<YOUR_SERVER_IP>:5000/api/auth/login"),
+      Uri.parse("http://<YOUR_SERVER_IP>:5000/api/auth/signup"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
         "username": username,
@@ -39,23 +35,19 @@ class _LoginScreenState extends State<LoginScreen> {
       }),
     );
 
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
 
-    if (response.statusCode == 200) {
-      final result = jsonDecode(response.body);
-      final userId = result['user_id'];
-
+    if (response.statusCode == 201) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("회원가입 성공! 로그인 해주세요.")),
+      );
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => SurveyScreen(userId: userId),
-        ),
+        MaterialPageRoute(builder: (_) => LoginScreen()),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("로그인 실패: ${response.body}")),
+        SnackBar(content: Text("회원가입 실패: ${response.body}")),
       );
     }
   }
@@ -63,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("로그인")),
+      appBar: AppBar(title: Text("회원가입")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -77,21 +69,12 @@ class _LoginScreenState extends State<LoginScreen> {
               obscureText: true,
               decoration: InputDecoration(labelText: "비밀번호"),
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => SignupScreen()),
-                );
-              },
-              child: Text("회원가입이 필요하신가요?"),
-            ),
             SizedBox(height: 20),
             _isLoading
                 ? CircularProgressIndicator()
                 : ElevatedButton(
-              onPressed: _login,
-              child: Text("로그인"),
+              onPressed: _signup,
+              child: Text("회원가입"),
             ),
           ],
         ),
