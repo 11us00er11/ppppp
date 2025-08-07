@@ -1,5 +1,6 @@
 flask
 flask-cors
-pymysql
-python-dotenv
 flask-jwt-extended
+python-dotenv
+pymysql
+Werkzeug
