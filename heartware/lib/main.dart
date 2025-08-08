@@ -22,7 +22,8 @@ class MindTalkApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/': (context) => LoginScreen(),
-        '/intro': (context) => IntroScreen(),
+        '/login': (context) => LoginScreen(),
+        '/intro': (context) => IntroScreenWithUser(userId: -1),
         '/chat': (context) => ChatScreen(),
         '/history': (context) => HistoryScreen(),
       },

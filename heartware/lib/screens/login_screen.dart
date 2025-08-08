@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'survey_screen.dart';
+import 'package:heartware/screens/intro_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -54,12 +55,15 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => SurveyScreen(userId: userId),
+            builder: (_) => IntroScreenWithUser(userId: userId),
           ),
         );
       } else {
+        final result = jsonDecode(utf8.decode(response.bodyBytes));
+        final errorMessage = result['message'] ?? "알 수 없는 오류가 발생했습니다.";
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("로그인 실패: ${response.body}")),
+          SnackBar(content: Text("로그인 실패: $errorMessage")),
         );
       }
     } catch (e) {
@@ -100,6 +104,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 );
               },
               child: Text("회원가입이 필요하신가요?"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => IntroScreenWithUser(userId: -1), // 비회원용 userId
+                  ),
+                );
+              },
+              child: Text("게스트로 시작하기"),
             ),
             SizedBox(height: 20),
             _isLoading
