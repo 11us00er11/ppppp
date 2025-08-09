@@ -10,44 +10,86 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final _usernameController = TextEditingController();
+  final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
+  // 간단한 이름 검증(한글/영문/공백/하이픈, 2~30자)
+  bool _validName(String s) {
+    final re = RegExp(r'^[A-Za-z가-힣\s\-]{2,30}$');
+    return re.hasMatch(s.trim());
+  }
+
   Future<void> _signup() async {
     final username = _usernameController.text.trim();
+    final name = _nameController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (username.isEmpty || password.isEmpty) {
+    if (username.isEmpty || name.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("아이디와 비밀번호를 모두 입력해주세요.")),
+        SnackBar(content: Text("아이디, 이름, 비밀번호를 모두 입력해주세요.")),
+      );
+      return;
+    }
+    if (!_validName(name)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("이름 형식이 올바르지 않습니다. (2~30자, 한글/영문/공백/하이픈)")),
+      );
+      return;
+    }
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("비밀번호는 8자 이상으로 설정해주세요.")),
       );
       return;
     }
 
     setState(() => _isLoading = true);
 
-    final response = await http.post(
-      Uri.parse("http://<YOUR_SERVER_IP>:5000/api/auth/signup"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "username": username,
-        "password": password,
-      }),
-    );
+    try {
+      final resp = await http
+          .post(
+        Uri.parse("http://<YOUR_SERVER_IP>:5000/api/auth/signup"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "username": username,
+          "name": name,
+          "password": password,
+        }),
+      )
+          .timeout(Duration(seconds: 10));
 
-    setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
 
-    if (response.statusCode == 201) {
+      if (resp.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("회원가입 성공! 로그인 해주세요.")),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => LoginScreen()),
+        );
+      } else if (resp.statusCode == 409) {
+        // 예: 중복 아이디
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("이미 사용 중인 아이디입니다.")),
+        );
+      } else {
+        // 서버가 {"error": "..."}로 보낸 경우 표시
+        String msg;
+        try {
+          msg = (jsonDecode(resp.body)['error'] ?? resp.body).toString();
+        } catch (_) {
+          msg = resp.body;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("회원가입 실패: $msg")),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("회원가입 성공! 로그인 해주세요.")),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => LoginScreen()),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("회원가입 실패: ${response.body}")),
+        SnackBar(content: Text("네트워크 오류: $e")),
       );
     }
   }
@@ -63,11 +105,17 @@ class _SignupScreenState extends State<SignupScreen> {
             TextField(
               controller: _usernameController,
               decoration: InputDecoration(labelText: "아이디"),
+              textInputAction: TextInputAction.next,
+            ),
+            TextField(
+              controller: _nameController,
+              decoration: InputDecoration(labelText: "이름"),
+              textInputAction: TextInputAction.next,
             ),
             TextField(
               controller: _passwordController,
               obscureText: true,
-              decoration: InputDecoration(labelText: "비밀번호"),
+              decoration: InputDecoration(labelText: "비밀번호 (8자 이상)"),
             ),
             SizedBox(height: 20),
             _isLoading
