@@ -1,3 +1,4 @@
+# db.py
 import pymysql
 from config import DB_CONFIG
 

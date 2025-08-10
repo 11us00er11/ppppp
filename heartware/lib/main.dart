@@ -3,6 +3,7 @@ import 'screens/intro_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/survey_screen.dart';
 
 void main() {
   runApp(MindTalkApp());
@@ -26,6 +27,13 @@ class MindTalkApp extends StatelessWidget {
         '/intro': (context) => IntroScreenWithUser(userId: -1),
         '/chat': (context) => ChatScreen(),
         '/history': (context) => HistoryScreen(),
+        '/survey': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          return SurveyScreen(
+            userId: (args?['userId'] as int?) ?? -1,
+            displayName: args?['displayName'] as String?, // 이름도 함께 전달
+          );
+        },
       },
     );
   }
