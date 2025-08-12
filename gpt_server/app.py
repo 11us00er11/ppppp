@@ -1,11 +1,11 @@
 # app.py
 from flask import Flask
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager          # ✅ 추가
+from flask_jwt_extended import JWTManager
 from routes.chat import chat_bp
 from routes.auth import auth_bp
 from routes.diary import diary_bp
-from config import SECRET_KEY                       # ✅ load_env 대신 SECRET_KEY 직접 사용
+from config import SECRET_KEY
 import logging
 
 logging.basicConfig(
@@ -25,7 +25,7 @@ app.config['JWT_SECRET_KEY'] = SECRET_KEY
 jwt = JWTManager(app)
 
 # 블루프린트 등록
-app.register_blueprint(chat_bp)                     # chat_bp 안에 url_prefix가 있으면 그대로 사용
+app.register_blueprint(chat_bp)
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(diary_bp, url_prefix="/api/diary")
 

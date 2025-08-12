@@ -9,29 +9,28 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  final _usernameController = TextEditingController();
-  final _nameController = TextEditingController();
+  final _userIdController = TextEditingController();
+  final _userNameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  // 간단한 이름 검증(한글/영문/공백/하이픈, 2~30자)
   bool _validName(String s) {
     final re = RegExp(r'^[A-Za-z가-힣\s\-]{2,30}$');
     return re.hasMatch(s.trim());
   }
 
   Future<void> _signup() async {
-    final username = _usernameController.text.trim();
-    final name = _nameController.text.trim();
+    final userId = _userIdController.text.trim();
+    final userName = _userNameController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (username.isEmpty || name.isEmpty || password.isEmpty) {
+    if (userId.isEmpty || userName.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("아이디, 이름, 비밀번호를 모두 입력해주세요.")),
       );
       return;
     }
-    if (!_validName(name)) {
+    if (!_validName(userName)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("이름 형식이 올바르지 않습니다. (2~30자, 한글/영문/공백/하이픈)")),
       );
@@ -52,8 +51,8 @@ class _SignupScreenState extends State<SignupScreen> {
         Uri.parse("http://<YOUR_SERVER_IP>:5000/api/auth/signup"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "username": username,
-          "name": name,
+          "user_id": userId,       // ← 스키마/백엔드와 일치
+          "user_name": userName,   // ← 스키마/백엔드와 일치
           "password": password,
         }),
       )
@@ -70,12 +69,10 @@ class _SignupScreenState extends State<SignupScreen> {
           MaterialPageRoute(builder: (_) => LoginScreen()),
         );
       } else if (resp.statusCode == 409) {
-        // 예: 중복 아이디
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("이미 사용 중인 아이디입니다.")),
         );
       } else {
-        // 서버가 {"error": "..."}로 보낸 경우 표시
         String msg;
         try {
           msg = (jsonDecode(resp.body)['error'] ?? resp.body).toString();
@@ -95,6 +92,14 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   @override
+  void dispose() {
+    _userIdController.dispose();
+    _userNameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("회원가입")),
@@ -102,16 +107,19 @@ class _SignupScreenState extends State<SignupScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // 아이디 입력
             TextField(
-              controller: _usernameController,
+              controller: _userIdController,
               decoration: InputDecoration(labelText: "아이디"),
               textInputAction: TextInputAction.next,
             ),
+            // 이름 입력
             TextField(
-              controller: _nameController,
+              controller: _userNameController,
               decoration: InputDecoration(labelText: "이름"),
               textInputAction: TextInputAction.next,
             ),
+            // 비밀번호 입력
             TextField(
               controller: _passwordController,
               obscureText: true,
