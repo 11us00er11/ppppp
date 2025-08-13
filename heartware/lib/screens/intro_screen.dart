@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'login_screen.dart';
 
 class IntroScreenWithUser extends StatelessWidget {
-  final int userId;
+  final int user_id;
   final String? displayName; // ✅ 추가: 이름
 
   const IntroScreenWithUser({
-    required this.userId,
+    required this.user_id,
     this.displayName,        // ✅ 선택 인자
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isGuest = userId == -1 || (displayName == null || displayName!.trim().isEmpty);
+    final isGuest = user_id == -1 || (displayName == null || displayName!.trim().isEmpty);
 
     return Scaffold(
       backgroundColor: Colors.indigo[50],
@@ -84,7 +84,7 @@ class IntroScreenWithUser extends StatelessWidget {
                     context,
                     '/survey',
                     arguments: {
-                      'userId': userId,
+                      'user_id': user_id,
                       'displayName': displayName, // 이름도 같이 전달
                     },
                   );

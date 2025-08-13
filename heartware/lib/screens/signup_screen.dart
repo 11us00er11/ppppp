@@ -20,17 +20,17 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _signup() async {
-    final userId = _userIdController.text.trim();
-    final userName = _userNameController.text.trim();
+    final user_id = _userIdController.text.trim();
+    final user_name = _userNameController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (userId.isEmpty || userName.isEmpty || password.isEmpty) {
+    if (user_id.isEmpty || user_name.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("아이디, 이름, 비밀번호를 모두 입력해주세요.")),
       );
       return;
     }
-    if (!_validName(userName)) {
+    if (!_validName(user_name)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("이름 형식이 올바르지 않습니다. (2~30자, 한글/영문/공백/하이픈)")),
       );
@@ -51,8 +51,8 @@ class _SignupScreenState extends State<SignupScreen> {
         Uri.parse("http://<YOUR_SERVER_IP>:5000/api/auth/signup"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "user_id": userId,       // ← 스키마/백엔드와 일치
-          "user_name": userName,   // ← 스키마/백엔드와 일치
+          "user_id": user_id,       // ← 스키마/백엔드와 일치
+          "user_name": user_name,   // ← 스키마/백엔드와 일치
           "password": password,
         }),
       )

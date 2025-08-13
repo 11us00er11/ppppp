@@ -28,10 +28,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    final userId = _userIdController.text.trim();
+    final user_id = _userIdController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (userId.isEmpty || password.isEmpty) {
+    if (user_id.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("아이디와 비밀번호를 모두 입력해주세요.")),
       );
@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Uri.parse("http://61.254.189.212:5000/api/auth/login"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "user_id": userId,             // ✅ 통일
+          "user_id": user_id,             // ✅ 통일
           "password": password,
         }),
       ).timeout(const Duration(seconds: 10));
@@ -62,19 +62,19 @@ class _LoginScreenState extends State<LoginScreen> {
         if (body['user'] != null) {
           final user = body['user'] as Map<String, dynamic>;
           userPk = (user['id'] as num).toInt();
-          displayName = (user['user_name'] ?? user['user_id'] ?? userId).toString();
+          displayName = (user['user_name'] ?? user['user_id'] ?? user_id).toString();
         } else {
           // 서버가 user 블록 없이 보낼 경우 대비 (선택)
           userPk = (body['user_id'] as num?)?.toInt() ?? -1;
           final claims = _decodeJwtPayload(token);
-          displayName = (claims['user_name'] ?? claims['user_id'] ?? userId).toString();
+          displayName = (claims['user_name'] ?? claims['user_id'] ?? user_id).toString();
         }
 
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => IntroScreenWithUser(
-              userId: userPk,
+              user_id: userPk,
               displayName: displayName,
             ),
           ),
@@ -125,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
             TextButton(
               onPressed: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => IntroScreenWithUser(userId: -1, displayName: null)),
+                MaterialPageRoute(builder: (_) => IntroScreenWithUser(user_id: -1, displayName: null)),
               ),
               child: Text("게스트로 시작하기"),
             ),

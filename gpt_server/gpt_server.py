@@ -11,7 +11,7 @@ CORS(app)
 
 def get_db_connection():
     return pymysql.connect(
-        host='localhost', user='root', password='비밀번호', db='gpt_app',
+        host='localhost', user='root', password='aaaa', db='gpt_app',
         charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor
     )
 
@@ -33,7 +33,7 @@ def signup():
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO users (user_id, user_name, password_hash) VALUES (%s, %s, %s)",
+                "INSERT INTO users (user_id, user_user_name, password_hash) VALUES (%s, %s, %s)",
                 (user_id, user_name, pw_hash)
             )
         conn.commit()

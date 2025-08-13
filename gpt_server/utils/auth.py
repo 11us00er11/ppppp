@@ -6,7 +6,7 @@ from config import Config
 def create_token(user):
     payload = {
         "sub": user["id"],
-        "username": user["username"],
+        "user_name": user["user_name"],
         "name": user["name"],
         "iat": datetime.datetime.utcnow(),
         "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=Config.JWT_EXPIRE_HOURS),
@@ -29,6 +29,6 @@ def auth_required(fn):
             return jsonify({"error": "token expired"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"error": "invalid token"}), 401
-        g.user = payload  # sub, username, name
+        g.user = payload  # sub, user_name, name
         return fn(*args, **kwargs)
     return wrapper

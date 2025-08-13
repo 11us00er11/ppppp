@@ -24,13 +24,13 @@ class MindTalkApp extends StatelessWidget {
       routes: {
         '/': (context) => LoginScreen(),
         '/login': (context) => LoginScreen(),
-        '/intro': (context) => IntroScreenWithUser(userId: -1),
+        '/intro': (context) => IntroScreenWithUser(user_id: -1),
         '/chat': (context) => ChatScreen(),
         '/history': (context) => HistoryScreen(),
         '/survey': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
           return SurveyScreen(
-            userId: (args?['userId'] as int?) ?? -1,
+            user_id: (args?['user_id'] as int?) ?? -1,
             displayName: args?['displayName'] as String?, // 이름도 함께 전달
           );
         },
