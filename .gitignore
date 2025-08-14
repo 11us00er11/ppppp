@@ -1,21 +1,57 @@
-# Python
+# -------- Python / Flask --------
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 *.db
+*.sqlite3
 venv/
-.env
+.venv/
+env/
+instance/
+.pytest_cache/
+.mypy_cache/
+coverage/
+htmlcov/
 *.log
 
-# Flutter
+# -------- Env / Secrets --------
+.env
+.env.*
+!.env.example
+
+# -------- Flutter / Dart --------
 .dart_tool/
 .packages
 .pub/
 build/
+.flutter-plugins
+.flutter-plugins-dependencies
 .idea/
-android/.gradle
+.vscode/
 *.iml
 
-# OS
+# -------- Android --------
+android/.gradle/
+.gradle/
+android/local.properties
+android/key.properties
+*.keystore
+*.jks
+android/app/release/
+android/app/debug/
+# Firebase (있을 경우)
+android/app/google-services.json
+
+# -------- iOS --------
+ios/Pods/
+# Xcode user data
+**/*.xcuserdatad/
+**/*.xcuserstate
+**/*.xcworkspace/xcuserdata/
+# Firebase (있을 경우)
+ios/Runner/GoogleService-Info.plist
+
+# -------- OS --------
 .DS_Store
 Thumbs.db
