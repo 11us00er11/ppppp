@@ -48,11 +48,11 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       final resp = await http
           .post(
-        Uri.parse("http://<YOUR_SERVER_IP>:5000/api/auth/signup"),
+        Uri.parse("http://61.254.189.212:5000/api/auth/signup"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "user_id": user_id,       // ← 스키마/백엔드와 일치
-          "user_name": user_name,   // ← 스키마/백엔드와 일치
+          "user_id": user_id,
+          "user_name": user_name,
           "password": password,
         }),
       )

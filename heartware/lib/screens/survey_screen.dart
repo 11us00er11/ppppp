@@ -74,9 +74,6 @@ class _SurveyScreenState extends State<SurveyScreen> {
                 MaterialPageRoute(
                   builder: (_) => ChatScreen(
                     initialMessage: message,
-                    // 필요하면 user_id/displayName도 넘기세요
-                    // user_id: widget.user_id,
-                    // displayName: widget.displayName,
                   ),
                 ),
               );

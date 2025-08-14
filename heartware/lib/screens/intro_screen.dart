@@ -3,11 +3,13 @@ import 'login_screen.dart';
 
 class IntroScreenWithUser extends StatelessWidget {
   final int user_id;
-  final String? displayName; // ✅ 추가: 이름
+  final String? displayName;
+  final String? token;
 
   const IntroScreenWithUser({
     required this.user_id,
-    this.displayName,        // ✅ 선택 인자
+    this.displayName,
+    this.token,
     super.key,
   });
 
@@ -29,7 +31,6 @@ class IntroScreenWithUser extends StatelessWidget {
               Icon(Icons.mood, size: 100, color: Colors.indigo),
               const SizedBox(height: 24),
 
-              // ✅ 이름 인사말
               if (!isGuest) ...[
                 Text(
                   "${displayName}님, 반가워요",
@@ -63,7 +64,7 @@ class IntroScreenWithUser extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pushNamed(context, '/chat',
-                      arguments: {"displayName": displayName}); // ✅ 전달(선택)
+                      arguments: {"displayName": displayName});
                 },
                 icon: const Icon(Icons.chat_bubble_outline),
                 label: const Text("시작하기"),
@@ -102,7 +103,16 @@ class IntroScreenWithUser extends StatelessWidget {
               const SizedBox(height: 10),
 
               ElevatedButton.icon(
-                onPressed: () => Navigator.pushNamed(context, '/history'),
+                onPressed: (user_id == -1 || token == null || token!.isEmpty)
+                  ? () => ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('로그인 후 이용 가능합니다.')))
+                    : () {
+                  Navigator.pushNamed(
+                    context,
+                    '/history',
+                    arguments: token,
+                  );
+                },
                 icon: const Icon(Icons.bar_chart),
                 label: const Text("감정 기록 보기"),
                 style: ElevatedButton.styleFrom(
@@ -117,7 +127,6 @@ class IntroScreenWithUser extends StatelessWidget {
 
               TextButton.icon(
                 onPressed: () {
-                  // (선택) 여기에 토큰/세션 제거 로직 추가 후 로그인 화면으로
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (_) => LoginScreen()),

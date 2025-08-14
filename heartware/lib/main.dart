@@ -26,7 +26,15 @@ class MindTalkApp extends StatelessWidget {
         '/login': (context) => LoginScreen(),
         '/intro': (context) => IntroScreenWithUser(user_id: -1),
         '/chat': (context) => ChatScreen(),
-        '/history': (context) => HistoryScreen(),
+        '/history': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments;
+          if (args is String && args.isNotEmpty) {
+            return HistoryScreen(token: args);
+          }
+          return const Scaffold(
+            body: Center(child: Text('로그인 후 이용 가능합니다.')),
+          );
+        },
         '/survey': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
           return SurveyScreen(

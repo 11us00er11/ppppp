@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Uri.parse("http://61.254.189.212:5000/api/auth/login"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "user_id": user_id,             // ✅ 통일
+          "user_id": user_id,
           "password": password,
         }),
       ).timeout(const Duration(seconds: 10));
@@ -56,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200) {
         final String token = (body['token'] ?? '') as String;
 
-        int userPk;        // DB PK (정수 id)
+        int userPk;
         String displayName;
 
         if (body['user'] != null) {
@@ -64,7 +64,6 @@ class _LoginScreenState extends State<LoginScreen> {
           userPk = (user['id'] as num).toInt();
           displayName = (user['user_name'] ?? user['user_id'] ?? user_id).toString();
         } else {
-          // 서버가 user 블록 없이 보낼 경우 대비 (선택)
           userPk = (body['user_id'] as num?)?.toInt() ?? -1;
           final claims = _decodeJwtPayload(token);
           displayName = (claims['user_name'] ?? claims['user_id'] ?? user_id).toString();
@@ -76,6 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
             builder: (_) => IntroScreenWithUser(
               user_id: userPk,
               displayName: displayName,
+              token: token,
             ),
           ),
         );
@@ -109,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           children: [
             TextField(
-              controller: _userIdController,                  // ✅ user_id
+              controller: _userIdController,
               decoration: InputDecoration(labelText: "아이디"),
               textInputAction: TextInputAction.next,
             ),
