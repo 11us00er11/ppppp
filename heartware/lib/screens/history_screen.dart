@@ -1,8 +1,34 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 const String baseUrl = 'http://127.0.0.1:5000';
+
+num _toNum(dynamic v) => v is num ? v : num.parse(v.toString());
+
+DateTime? _parseFlexibleDT(dynamic v) {
+  if (v == null) return null;
+  final s = v.toString().trim();
+  if (s.isEmpty) return null;
+
+  final asNum = num.tryParse(s);
+  if (asNum != null) {
+    if (s.length >= 13) {
+      return DateTime.fromMillisecondsSinceEpoch(asNum.toInt(), isUtc: true).toLocal();
+    } else if (s.length >= 10) {
+      return DateTime.fromMillisecondsSinceEpoch((asNum * 1000).toInt(), isUtc: true).toLocal();
+    }
+  }
+
+  try { return DateTime.parse(s).toLocal(); } catch (_) {}
+  try { return DateFormat('yyyy-MM-dd HH:mm:ss').parseUtc(s).toLocal(); } catch (_) {}
+  try { return DateFormat('yyyy/MM/dd HH:mm:ss').parseUtc(s).toLocal(); } catch (_) {}
+  try { return DateFormat('yyyy-MM-dd').parseUtc(s).toLocal(); } catch (_) {}
+  try { return DateFormat('EEE, dd MMM yyyy HH:mm:ss', 'en_US').parseUtc(s).toLocal(); } catch (_) {}
+
+  return null;
+}
 
 class DiaryEntry {
   final int id;
@@ -22,18 +48,17 @@ class DiaryEntry {
   });
 
   factory DiaryEntry.fromJson(Map<String, dynamic> j) {
-    DateTime parseDT(dynamic v) =>
-        v == null ? DateTime.now() : DateTime.parse(v.toString()).toLocal();
     return DiaryEntry(
-      id: (j['id'] as num).toInt(),
-      userPk: (j['user_pk'] as num).toInt(),
+      id: _toNum(j['id']).toInt(),
+      userPk: _toNum(j['user_pk']).toInt(),
       mood: j['mood']?.toString(),
       notes: j['notes']?.toString(),
-      createdAt: parseDT(j['created_at']),
-      updatedAt: j['updated_at'] == null ? null : parseDT(j['updated_at']),
+      createdAt: _parseFlexibleDT(j['created_at']) ?? DateTime.now(),
+      updatedAt: _parseFlexibleDT(j['updated_at']),
     );
   }
 }
+
 
 class DiaryService {
   static Future<List<DiaryEntry>> fetch({
