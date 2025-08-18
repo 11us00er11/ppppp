@@ -8,8 +8,10 @@ import 'dart:async';
 const int typingSpeedMs = 60;
 
 class ChatScreen extends StatefulWidget {
+  final String token;
   final String? initialMessage;
-  ChatScreen({this.initialMessage});
+
+  ChatScreen({required this.token, this.initialMessage});
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
@@ -128,17 +130,24 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (!mounted) return;
     setState(() {
-      _messages.add(Message(
-        text: "...",
-        time: loadingTime,
-        role: "bot",
-      ));
+      _messages.add(Message(text: "...", time: loadingTime, role: "bot"));
     });
-    _scrollToBottom();
 
-    String responseText = await GPTService.sendMessage(input);
-    _animateBotResponse(responseText, loadingIndex, loadingTime);
-    _scrollToBottom();
+    try {
+      String responseText = await GPTService.sendMessage(
+        input,
+        token: widget.token, // ✅ 여기서 token 전달
+      );
+      _animateBotResponse(responseText, loadingIndex, loadingTime);
+    } catch (e) {
+      setState(() {
+        _messages[loadingIndex] = Message(
+          text: "오류: $e",
+          time: loadingTime,
+          role: "bot",
+        );
+      });
+    }
   }
 
   Widget _buildMessage(Message message) {
@@ -154,6 +163,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final args = ModalRoute.of(context)!.settings.arguments as Map?;
+    final String token = (args?['token'] as String?) ?? '';
+    final String? displayName = args?['displayName'] as String?;
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(title: Text("마음톡 챗봇")),

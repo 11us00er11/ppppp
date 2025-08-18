@@ -1,279 +1,340 @@
-# gpt_server.py
+import os
 from datetime import datetime, timedelta
+from typing import Optional
+
+import pymysql
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
-from werkzeug.security import generate_password_hash, check_password_hash
-import pymysql
-import logging
+from werkzeug.security import check_password_hash, generate_password_hash
+from dotenv import load_dotenv
+from groq import Groq
 
-# ---------------------- Flask App ----------------------
+# -------------------------------
+# Env & App Config
+# -------------------------------
+load_dotenv()
+
 app = Flask(__name__)
-
-# ★ 실제 서비스에서는 .env로 빼세요
-app.config['JWT_SECRET_KEY'] = 'change_me_to_strong_secret'
-
-# /api/diary 와 /api/diary/ 둘 다 허용
 app.url_map.strict_slashes = False
 
-# CORS: Flutter Web 대비
-CORS(app,
-     resources={r"/api/*": {"origins": "*"}},
-     supports_credentials=False,
-     expose_headers=["Content-Type", "Authorization"])
-
-@app.after_request
-def add_cors_headers(resp):
-    origin = request.headers.get("Origin", "*")
-    resp.headers["Access-Control-Allow-Origin"] = origin
-    resp.headers["Vary"] = "Origin"
-    resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, PUT, OPTIONS"
-    return resp
-
-# 로깅(422 원인 등 확인용)
-logging.basicConfig(level=logging.INFO)
-
-# JWT는 app 생성 이후에 초기화해야 함 (NameError 방지)
+# JWT
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change_me_to_strong_secret")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
+    hours=int(os.getenv("JWT_EXPIRE_HOURS", "24"))
+)
 jwt = JWTManager(app)
 
-# 422/401 원인 진단 핸들러
-@jwt.invalid_token_loader
-def invalid_token_callback(reason):
-    app.logger.error(f"[JWT invalid] {reason}")
-    return jsonify(error=f"invalid_token: {reason}"), 422
+# CORS
+CORS(app,
+     resources={r"/api/*": {"origins": os.getenv("FRONTEND_ORIGIN", "*")}},
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-@jwt.unauthorized_loader
-def missing_token_callback(reason):
-    app.logger.error(f"[JWT missing] {reason}")
-    return jsonify(error=f"missing_token: {reason}"), 401
+# Groq (LLM)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+MODEL_NAME = os.getenv("GPT_MODEL", "llama-3.1-70b-versatile")
+SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "너는 마음을 어루만지는 챗봇이야.")
 
-@jwt.expired_token_loader
-def expired_token_callback(jwt_header, jwt_payload):
-    app.logger.error("[JWT expired]")
-    return jsonify(error="token_expired"), 401
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY 환경변수가 설정되지 않았습니다.")
+gclient = Groq(api_key=GROQ_API_KEY)
 
-# ---------------------- DB ----------------------
-def get_db_connection():
-    return pymysql.connect(
-        host='localhost', user='root', password='aaaa', db='gpt_app',
-        charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor
-    )
+# DB
+DB_CONF = dict(
+    host=os.getenv("DB_HOST", "127.0.0.1"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD", "aaaa"),
+    database=os.getenv("DB_NAME", "gpt_app"),
+    port=int(os.getenv("DB_PORT", "3306")),
+    charset="utf8mb4",
+    cursorclass=pymysql.cursors.DictCursor,
+    autocommit=True,
+)
 
-# ---------------------- Auth ----------------------
+
+def get_conn():
+    return pymysql.connect(**DB_CONF)
+
+
+# -------------------------------
+# Utils
+# -------------------------------
+def parse_dt(s: Optional[str]) -> Optional[str]:
+    """YYYY-MM-DD or YYYY-MM-DD HH:MM 형태를 MySQL DATETIME 문자열로 정규화"""
+    if not s:
+        return None
+    s = s.strip()
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+    return None
+
+
+# -------------------------------
+# Health
+# -------------------------------
+@app.get("/api/health")
+def health():
+    return jsonify(ok=True, model=MODEL_NAME, time=datetime.utcnow().isoformat() + "Z")
+
+
+# -------------------------------
+# Auth
+# 테이블: users(id, user_id, user_name, password_hash, created_at)
+# qurry.sql의 예시 해시가 scrypt 형식일 수 있습니다.
+# - Werkzeug의 check_password_hash로 검증을 시도하되,
+#   형식 불일치 시 False를 돌려 "아이디/비번 오류"로 처리합니다.
+# -------------------------------
 @app.post("/api/auth/signup")
 def signup():
     data = request.get_json(silent=True) or {}
     user_id = (data.get("user_id") or "").strip()
     user_name = (data.get("user_name") or "").strip()
-    password = data.get("password") or ""
+    password = (data.get("password") or "").strip()
 
     if not user_id or not user_name or not password:
-        return jsonify(error="아이디/이름/비밀번호를 모두 입력해주세요."), 400
-    if len(password) < 8:
-        return jsonify(error="비밀번호는 8자 이상"), 400
+        return jsonify(error="user_id, user_name, password가 필요합니다."), 400
 
-    pw_hash = generate_password_hash(password, method="scrypt")
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id FROM users WHERE user_id=%s", (user_id,))
+        if cur.fetchone():
+            return jsonify(error="이미 존재하는 user_id 입니다."), 409
 
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO users (user_id, user_name, password_hash) VALUES (%s, %s, %s)",
-                (user_id, user_name, pw_hash)
-            )
-        conn.commit()
-        return jsonify(message="회원가입 성공"), 201
-    except pymysql.err.IntegrityError:
-        return jsonify(error="이미 사용 중인 아이디입니다."), 409
-    except Exception as e:
-        app.logger.exception("signup error")
-        return jsonify(error=str(e)), 500
-    finally:
-        conn.close()
+        # PBKDF2 해시 사용 (기본)
+        pw_hash = generate_password_hash(password)
+        cur.execute(
+            "INSERT INTO users (user_id, user_name, password_hash) VALUES (%s,%s,%s)",
+            (user_id, user_name, pw_hash),
+        )
+
+        cur.execute("SELECT id FROM users WHERE user_id=%s", (user_id,))
+        row = cur.fetchone()
+
+    token = create_access_token(identity={"user_pk": row["id"], "user_id": user_id, "user_name": user_name})
+    return jsonify(access_token=token, user={"user_id": user_id, "user_name": user_name})
+
 
 @app.post("/api/auth/login")
 def login():
     data = request.get_json(silent=True) or {}
     user_id = (data.get("user_id") or "").strip()
-    password = data.get("password") or ""
-
+    password = (data.get("password") or "").strip()
     if not user_id or not password:
-        return jsonify(error="아이디/비밀번호를 입력하세요."), 400
+        return jsonify(error="user_id, password가 필요합니다."), 400
 
-    conn = get_db_connection()
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id, user_id, user_name, password_hash FROM users WHERE user_id=%s", (user_id,))
+        row = cur.fetchone()
+
+    if not row:
+        return jsonify(error="아이디 또는 비밀번호가 올바르지 않습니다."), 401
+
+    stored = row["password_hash"] or ""
+    ok = False
     try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, user_id, user_name, password_hash
-                FROM users
-                WHERE user_id=%s
-            """, (user_id,))
-            user = cur.fetchone()
-
-        if not user or not check_password_hash(user["password_hash"], password):
-            return jsonify(error="아이디 또는 비밀번호가 잘못되었습니다."), 401
-
-        # ★ PyJWT 2.x: sub는 문자열 권장 → 문자열로 저장
-        token = create_access_token(identity=str(user["id"]))
-
-        return jsonify(
-            token=token,
-            user={"id": user["id"], "user_id": user["user_id"], "user_name": user["user_name"]}
-        ), 200
-    except Exception as e:
-        app.logger.exception("login error")
-        return jsonify(error=str(e)), 500
-    finally:
-        conn.close()
-
-# ---------------------- Diary (list/create) ----------------------
-@app.route("/api/diary", methods=["GET", "POST", "OPTIONS"])
-@app.route("/api/diary/", methods=["GET", "POST", "OPTIONS"])
-@jwt_required(optional=False)
-def diary_collection():
-    if request.method == "OPTIONS":
-        return ("", 204)
-
-    # ★ 토큰에서 문자열로 꺼낸 뒤 int로 변환
-    try:
-        user_id = int(get_jwt_identity())
+        ok = check_password_hash(stored, password)
     except Exception:
-        return jsonify(error="Unauthorized"), 401
+        ok = False  # 해시 포맷 불일치 등
 
-    if request.method == "GET":
-        page = max(int(request.args.get("page", 1) or 1), 1)
-        page_size = int(request.args.get("page_size", 20) or 20)
-        page_size = max(1, min(page_size, 100))
+    if not ok:
+        # 만약 기존에 '데모 로그인'을 쓰셨다면, 아래를 임시로 허용할 수 있습니다.
+        # if password == "pass": ok = True
+        return jsonify(error="아이디 또는 비밀번호가 올바르지 않습니다."), 401
 
-        q = (request.args.get("q") or "").strip()
-        from_str = (request.args.get("from") or "").strip()
-        to_str = (request.args.get("to") or "").strip()
-        moods_str = (request.args.get("mood") or "").strip()
+    token = create_access_token(identity={"user_pk": row["id"], "user_id": row["user_id"], "user_name": row["user_name"]})
+    return jsonify(access_token=token, user={"user_id": row["user_id"], "user_name": row["user_name"]})
 
-        where = ["user_pk=%s", "deleted_at IS NULL"]
-        params = [user_id]
 
-        # 날짜(하루 전체 포함)
-        if from_str:
-            try:
-                d = datetime.strptime(from_str, "%Y-%m-%d")
-                where.append("created_at >= %s")
-                params.append(d.strftime("%Y-%m-%d 00:00:00"))
-            except:
-                pass
-        if to_str:
-            try:
-                d = datetime.strptime(to_str, "%Y-%m-%d") + timedelta(days=1)
-                where.append("created_at < %s")
-                params.append(d.strftime("%Y-%m-%d 00:00:00"))
-            except:
-                pass
-
-        # 무드 필터
-        if moods_str:
-            moods = [m.strip() for m in moods_str.split(",") if m.strip()]
-            if moods:
-                where.append("mood IN (" + ",".join(["%s"] * len(moods)) + ")")
-                params.extend(moods)
-
-        # 키워드 검색
-        if q:
-            where.append("notes LIKE %s")
-            params.append(f"%{q}%")
-
-        where_sql = " AND ".join(where)
-        offset = (page - 1) * page_size
-
-        conn = get_db_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(f"""
-                    SELECT id, user_pk, mood, notes, created_at, updated_at
-                    FROM emotion_diary
-                    WHERE {where_sql}
-                    ORDER BY created_at DESC, id DESC
-                    LIMIT %s OFFSET %s
-                """, params + [page_size, offset])
-                rows = cur.fetchall()
-            # Flutter는 data['items']를 읽음
-            return jsonify({"items": rows}), 200
-        except Exception as e:
-            app.logger.exception("diary list error")
-            return jsonify(error=str(e)), 500
-        finally:
-            conn.close()
-
-    # POST (create)
+# -------------------------------
+# Chat (Groq LLM)
+# -------------------------------
+@app.post("/api/chat")
+@jwt_required()
+def chat():
+    uid = get_jwt_identity()  # {"user_pk","user_id","user_name"}
     data = request.get_json(silent=True) or {}
+
+    user_message = (data.get("message") or "").strip()
+    history = data.get("history") or []  # [{role:"user"|"assistant", content:"..."}]
+    if not user_message:
+        return jsonify(error="message가 필요합니다."), 400
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for turn in history:
+        r = turn.get("role")
+        c = (turn.get("content") or "").strip()
+        if r in ("user", "assistant") and c:
+            messages.append({"role": r, "content": c})
+    messages.append({"role": "user", "content": user_message})
+
+    try:
+        completion = gclient.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.8,
+            max_tokens=1024,
+        )
+        reply = completion.choices[0].message.content
+        return jsonify(reply=reply)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+# -------------------------------
+# CORS Preflight (OPTIONS)
+# -------------------------------
+@app.route("/api/diary", methods=["OPTIONS"])
+@app.route("/api/diary/", methods=["OPTIONS"])
+def diary_options():
+    return ("", 204)
+
+@app.route("/api/diary/<int:_id>", methods=["OPTIONS"])
+def diary_item_options(_id):
+    return ("", 204)
+
+# Chat
+@app.route("/api/chat", methods=["OPTIONS"])
+def _chat_options():
+    return ("", 204)
+# -------------------------------
+# Emotion Diary
+# 테이블: emotion_diary(id, user_pk, mood, notes, created_at, updated_at, deleted_at)
+# -------------------------------
+@app.get("/api/diary")
+@jwt_required()
+def diary_list():
+    uid = get_jwt_identity()
+    user_pk = uid["user_pk"]
+
+    mood = (request.args.get("mood") or "").strip() or None
+    q = (request.args.get("q") or "").strip() or None
+    dt_from = parse_dt(request.args.get("from"))
+    dt_to = parse_dt(request.args.get("to"))
+
+    # ✅ page_size와 size 둘 다 지원
+    page = max(1, int(request.args.get("page", "1")))
+    size_param = request.args.get("size", request.args.get("page_size", "20"))
+    size = min(100, max(1, int(size_param)))
+    offset = (page - 1) * size
+
+    where = ["user_pk=%s", "deleted_at IS NULL"]
+    params = [user_pk]
+    if mood:
+        where.append("mood=%s")
+        params.append(mood)
+    if q:
+        where.append("(notes LIKE %s)")
+        params.append(f"%{q}%")
+    if dt_from:
+        where.append("created_at >= %s")
+        params.append(dt_from)
+    if dt_to:
+        where.append("created_at <= %s")
+        params.append(dt_to)
+
+    where_sql = " AND ".join(where)
+    sql = f"""
+        SELECT id, mood, notes, created_at, updated_at
+        FROM emotion_diary
+        WHERE {where_sql}
+        ORDER BY created_at DESC
+        LIMIT %s OFFSET %s
+    """
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(sql, (*params, size, offset))
+        items = cur.fetchall()
+
+        cur.execute(f"SELECT COUNT(*) AS cnt FROM emotion_diary WHERE {where_sql}", params)
+        total = cur.fetchone()["cnt"]
+
+    return jsonify(
+        items=items,
+        page=page,
+        size=size,
+        total=total,
+        pages=(total + size - 1) // size
+    )
+
+
+@app.post("/api/diary")
+@jwt_required()
+def diary_create():
+    uid = get_jwt_identity()
+    user_pk = uid["user_pk"]
+    data = request.get_json(silent=True) or {}
+
+    mood = (data.get("mood") or "").strip()
+    notes = (data.get("notes") or None)
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO emotion_diary (user_pk, mood, notes) VALUES (%s,%s,%s)",
+            (user_pk, mood, notes),
+        )
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
+        new_id = cur.fetchone()["id"]
+
+        cur.execute(
+            "SELECT id, mood, notes, created_at, updated_at FROM emotion_diary WHERE id=%s",
+            (new_id,),
+        )
+        row = cur.fetchone()
+
+    return jsonify(item=row), 201
+
+
+@app.put("/api/diary/<int:diary_id>")
+@jwt_required()
+def diary_update(diary_id: int):
+    uid = get_jwt_identity()
+    user_pk = uid["user_pk"]
+    data = request.get_json(silent=True) or {}
+
     mood = (data.get("mood") or "").strip() or None
-    notes = (data.get("notes") or "").strip() or None
+    notes = (data.get("notes") or None)
 
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO emotion_diary (user_pk, mood, notes)
-                VALUES (%s, %s, %s)
-            """, (user_id, mood, notes))
-            new_id = cur.lastrowid
-            conn.commit()
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE emotion_diary SET mood=%s, notes=%s WHERE id=%s AND user_pk=%s AND deleted_at IS NULL",
+            (mood, notes, diary_id, user_pk),
+        )
+        if cur.rowcount == 0:
+            return jsonify(error="수정할 항목이 없거나 권한이 없습니다."), 404
 
-            cur.execute("""
-                SELECT id, user_pk, mood, notes, created_at, updated_at
-                FROM emotion_diary
-                WHERE id=%s
-            """, (new_id,))
-            row = cur.fetchone()
+        cur.execute(
+            "SELECT id, mood, notes, created_at, updated_at FROM emotion_diary WHERE id=%s",
+            (diary_id,),
+        )
+        row = cur.fetchone()
 
-        # Flutter create()는 단일 객체 또는 {"item": {...}} 모두 처리
-        return jsonify(row), 201
-    except Exception as e:
-        conn.rollback()
-        app.logger.exception("diary create error")
-        return jsonify(error=str(e)), 500
-    finally:
-        conn.close()
+    return jsonify(item=row)
 
-# ---------------------- Diary (delete) ----------------------
-@app.route("/api/diary/<int:pk>", methods=["DELETE", "OPTIONS"])
-@jwt_required(optional=False)
-def diary_item(pk):
-    if request.method == "OPTIONS":
-        return ("", 204)
 
-    try:
-        user_id = int(get_jwt_identity())
-    except Exception:
-        return jsonify(error="Unauthorized"), 401
+@app.delete("/api/diary/<int:diary_id>")
+@jwt_required()
+def diary_delete(diary_id: int):
+    uid = get_jwt_identity()
+    user_pk = uid["user_pk"]
 
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            # 소프트 삭제 (deleted_at 사용). 없으면 물리 삭제로 대체 가능.
-            cur.execute("""
-                UPDATE emotion_diary
-                SET deleted_at = NOW()
-                WHERE id=%s AND user_pk=%s AND deleted_at IS NULL
-            """, (pk, user_id))
-            if cur.rowcount == 0:
-                # 소프트 삭제가 반영 안되면 물리 삭제 시도(옵션)
-                cur.execute("""
-                    DELETE FROM emotion_diary
-                    WHERE id=%s AND user_pk=%s
-                """, (pk, user_id))
-        conn.commit()
-        return ("", 204)
-    except Exception as e:
-        conn.rollback()
-        app.logger.exception("diary delete error")
-        return jsonify(error=str(e)), 500
-    finally:
-        conn.close()
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE emotion_diary SET deleted_at=NOW() WHERE id=%s AND user_pk=%s AND deleted_at IS NULL",
+            (diary_id, user_pk),
+        )
+        if cur.rowcount == 0:
+            return jsonify(error="삭제할 항목이 없거나 권한이 없습니다."), 404
 
-# ---------------------- Run ----------------------
+    return jsonify(ok=True)
+
+
+# -------------------------------
+# Run
+# -------------------------------
 if __name__ == "__main__":
-    # 개발용 실행
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)

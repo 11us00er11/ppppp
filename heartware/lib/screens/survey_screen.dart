@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'chat_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
-  final int user_id;
+  final String token;
   final String? displayName;
 
   const SurveyScreen({
-    required this.user_id,
+    required this.token,
     this.displayName,
     super.key,
   });
 
   @override
-  State<SurveyScreen> createState() => _SurveyScreenState(); // ✅ 필수
+  State<SurveyScreen> createState() => _SurveyScreenState();
 }
 
 class _SurveyScreenState extends State<SurveyScreen> {
@@ -69,13 +69,22 @@ class _SurveyScreenState extends State<SurveyScreen> {
             child: const Text("예"),
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.push(
+
+              final name = (widget.displayName ?? '').trim();
+              final intro = name.isNotEmpty ? '$name님, ' : '';
+              final initial = '''
+              ${intro}자가 진단 결과를 공유할게요.
+              - 총점: $_totalScore / 15
+              - 해석: $_resultMessage
+              ''';
+
+              Navigator.pushNamed(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => ChatScreen(
-                    initialMessage: message,
-                  ),
-                ),
+                '/chat',
+                arguments: {
+                  'token': widget.token,
+                  'initialMessage': initial,
+                },
               );
             },
           ),

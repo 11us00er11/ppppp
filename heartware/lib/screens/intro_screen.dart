@@ -85,7 +85,7 @@ class IntroScreenWithUser extends StatelessWidget {
                     context,
                     '/survey',
                     arguments: {
-                      'user_id': user_id,
+                      "token": token,
                       'displayName': displayName, // 이름도 같이 전달
                     },
                   );

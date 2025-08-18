@@ -28,12 +28,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    final user_id = _userIdController.text.trim();
+    final userId = _userIdController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (user_id.isEmpty || password.isEmpty) {
+    if (userId.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("아이디와 비밀번호를 모두 입력해주세요.")),
+        const SnackBar(content: Text("아이디와 비밀번호를 모두 입력해주세요.")),
       );
       return;
     }
@@ -41,50 +41,78 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http.post(
+      final resp = await http
+          .post(
         Uri.parse("http://61.254.189.212:5000/api/auth/login"),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "user_id": user_id,
-          "password": password,
-        }),
-      ).timeout(const Duration(seconds: 10));
+        body: jsonEncode({"user_id": userId, "password": password}),
+      )
+          .timeout(const Duration(seconds: 10));
 
       setState(() => _isLoading = false);
 
-      final body = jsonDecode(utf8.decode(response.bodyBytes));
-      if (response.statusCode == 200) {
-        final String token = (body['token'] ?? '') as String;
+      Map<String, dynamic> body = {};
+      try {
+        body = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      } catch (_) {}
 
-        int userPk;
-        String displayName;
-
-        if (body['user'] != null) {
-          final user = body['user'] as Map<String, dynamic>;
-          userPk = (user['id'] as num).toInt();
-          displayName = (user['user_name'] ?? user['user_id'] ?? user_id).toString();
-        } else {
-          userPk = (body['user_id'] as num?)?.toInt() ?? -1;
-          final claims = _decodeJwtPayload(token);
-          displayName = (claims['user_name'] ?? claims['user_id'] ?? user_id).toString();
-        }
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => IntroScreenWithUser(
-              user_id: userPk,
-              displayName: displayName,
-              token: token,
-            ),
-          ),
-        );
-      } else {
-        final errorMessage = body['error'] ?? body['message'] ?? "알 수 없는 오류가 발생했습니다.";
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("로그인 실패: $errorMessage")),
-        );
+      if (resp.statusCode != 200) {
+        final msg = (body['error'] ?? body['message'] ?? '로그인 실패').toString();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        return;
       }
+
+      // 1) token 키 이름 호환 (access_token 우선)
+      final token = (body['access_token'] ?? body['token'] ?? '') as String;
+      if (token.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("토큰이 없습니다. 서버 응답을 확인하세요.")),
+        );
+        return;
+      }
+
+      // 2) user_pk 가져오기: body.user.user_pk -> JWT payload.user_pk -> 보정
+      int userPk = -1;
+
+      if (body['user'] is Map) {
+        final u = body['user'] as Map;
+        final v = u['user_pk'];
+        if (v is num) userPk = v.toInt();
+        if (v is String) userPk = int.tryParse(v) ?? userPk;
+      }
+
+      if (userPk < 0) {
+        final claims = _decodeJwtPayload(token);
+        final v = claims['user_pk'];
+        if (v is num) userPk = v.toInt();
+        if (v is String) userPk = int.tryParse(v) ?? userPk;
+      }
+
+      // 토큰이 있는데도 userPk를 못 읽었으면 0으로 보정(게스트 오인 방지)
+      if (userPk < 0 && token.isNotEmpty) userPk = 0;
+
+      // 3) displayName: body.user 우선, 없으면 JWT payload, 마지막으로 입력값
+      String displayName = userId;
+      if (body['user'] is Map) {
+        final u = body['user'] as Map;
+        displayName = (u['user_name'] ?? u['user_id'] ?? displayName).toString();
+      } else {
+        final claims = _decodeJwtPayload(token);
+        displayName =
+            (claims['user_name'] ?? claims['user_id'] ?? displayName).toString();
+      }
+
+      // 4) 화면 이동 (token 존재 시 로그인 사용자로 취급)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => IntroScreenWithUser(
+            user_id: userPk,          // 0 이상 보장
+            displayName: displayName, // null/빈값 방지됨
+            token: token,             // 비어있지 않음
+          ),
+        ),
+      );
     } catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -125,9 +153,15 @@ class _LoginScreenState extends State<LoginScreen> {
             TextButton(
               onPressed: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => IntroScreenWithUser(user_id: -1, displayName: null)),
+                MaterialPageRoute(
+                  builder: (_) => IntroScreenWithUser(
+                    user_id: -1,
+                    displayName: '게스트',   // null 말고 안전한 문자열
+                    token: '',              // 필요하다면 빈 문자열
+                  ),
+                ),
               ),
-              child: Text("게스트로 시작하기"),
+              child: const Text("게스트로 시작하기"),
             ),
             const SizedBox(height: 20),
             _isLoading ? const CircularProgressIndicator()

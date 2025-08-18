@@ -25,7 +25,23 @@ class MindTalkApp extends StatelessWidget {
         '/': (context) => LoginScreen(),
         '/login': (context) => LoginScreen(),
         '/intro': (context) => IntroScreenWithUser(user_id: -1),
-        '/chat': (context) => ChatScreen(),
+
+        // ✅ /chat: arguments로 token, initialMessage 받기
+        '/chat': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final token = args?['token'] as String?;
+          final initialMessage = args?['initialMessage'] as String?;
+          if (token == null || token.isEmpty) {
+            return const Scaffold(
+              body: Center(child: Text('토큰 누락: 로그인 후 이용해주세요.')),
+            );
+          }
+          return ChatScreen(
+            token: token,
+            initialMessage: initialMessage,
+          );
+        },
+
         '/history': (context) {
           final args = ModalRoute.of(context)!.settings.arguments;
           if (args is String && args.isNotEmpty) {
@@ -35,11 +51,23 @@ class MindTalkApp extends StatelessWidget {
             body: Center(child: Text('로그인 후 이용 가능합니다.')),
           );
         },
+
+        // ✅ /survey: arguments로 token(필수), displayName(옵션) 받기
         '/survey': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+
+          final token = args?['token'] as String?;
+          final displayName = args?['displayName'] as String?;
+
+          if (token == null || token.isEmpty) {
+            return const Scaffold(
+              body: Center(child: Text('토큰 누락: 로그인 후 이용해주세요.')),
+            );
+          }
+
           return SurveyScreen(
-            user_id: (args?['user_id'] as int?) ?? -1,
-            displayName: args?['displayName'] as String?, // 이름도 함께 전달
+            token: token,                // 🔑 SurveyScreen은 token을 required로 받는 버전
+            displayName: displayName,    // (옵션)
           );
         },
       },

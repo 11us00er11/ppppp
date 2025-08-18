@@ -1,25 +1,26 @@
+// lib/services/gpt_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class GPTService {
-  static const String _apiUrl = "http://localhost:5000/chat"; // 필요 시 수정
+  static const String baseUrl = "http://61.254.189.212:5000";
 
-  static Future<String> sendMessage(String message) async {
-    try {
-      final response = await http.post(
-        Uri.parse(_apiUrl),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"message": message}),
-      );
+  static Future<String> sendMessage(String message, {required String token}) async {
+    final uri = Uri.parse("$baseUrl/api/chat");
+    final resp = await http.post(
+      uri,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", // ✅ JWT 추가
+      },
+      body: jsonEncode({"message": message}),
+    );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data["response"] ?? "응답 없음";
-      } else {
-        return "서버 오류: ${response.statusCode}";
-      }
-    } catch (e) {
-      return "연결 실패: $e";
+    if (resp.statusCode != 200) {
+      throw Exception("Chat API error: ${resp.body}");
     }
+
+    final json = jsonDecode(utf8.decode(resp.bodyBytes));
+    return json["reply"] ?? "서버 응답 오류";
   }
 }
