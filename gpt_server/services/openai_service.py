@@ -1,34 +1,36 @@
-import openai
+# services/openai_service.py
 import os
 import logging
 import time
+from groq import Groq
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    raise RuntimeError("GROQ_API_KEY가 설정되지 않았습니다.")
+client = Groq(api_key=GROQ_API_KEY)
+
 system_prompt = os.getenv("SYSTEM_PROMPT", "너는 마음을 어루만지는 챗봇이야.")
+default_model = os.getenv("GPT_MODEL", os.getenv("MODEL_NAME", "llama-3.1-70b-versatile"))
 
-def get_chat_response(user_message):
+def get_chat_response(user_message: str) -> str:
     max_retries = 3
-    delay = 2  # 초기 지연 시간 (초)
-
+    delay = 2
     for attempt in range(max_retries):
         try:
             logging.info(f"사용자 메시지 수신: {user_message}")
-
-            response = openai.ChatCompletion.create(
-                model=os.getenv("GPT_MODEL", "gpt-3.5-turbo"),
+            completion = client.chat.completions.create(
+                model=default_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ]
+                    {"role": "user", "content": user_message},
+                ],
+                temperature=0.8,
+                max_tokens=1024,
             )
-
-            logging.info("GPT 응답 생성 성공")
-            return response["choices"][0]["message"]["content"]
-
-        except openai.error.RateLimitError as e:
-            logging.warning(f"RateLimitError 발생 (시도 {attempt + 1}/{max_retries}), {delay}s 후 재시도")
+            return completion.choices[0].message.content
+        except Exception as e:
+            logging.warning(f"Groq 호출 실패 (시도 {attempt+1}/{max_retries}): {e}")
+            if attempt == max_retries - 1:
+                raise
             time.sleep(delay)
-            delay *= 2  # 2, 4, 8초 지연
-
-    logging.error("GPT 호출 실패: 재시도 끝", exc_info=True)
-    raise openai.error.RateLimitError("GPT 호출 실패: 사용량 초과 및 재시도 실패")
+            delay *= 2

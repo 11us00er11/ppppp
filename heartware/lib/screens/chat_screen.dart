@@ -8,10 +8,9 @@ import 'dart:async';
 const int typingSpeedMs = 60;
 
 class ChatScreen extends StatefulWidget {
-  final String token;
+  final String? token;              // was: final String token;
   final String? initialMessage;
-
-  ChatScreen({required this.token, this.initialMessage});
+  ChatScreen({this.token, this.initialMessage});  // was: required this.token
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
@@ -136,7 +135,7 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       String responseText = await GPTService.sendMessage(
         input,
-        token: widget.token, // ✅ 여기서 token 전달
+        token: widget.token ?? '', // ✅ 여기서 token 전달
       );
       _animateBotResponse(responseText, loadingIndex, loadingTime);
     } catch (e) {

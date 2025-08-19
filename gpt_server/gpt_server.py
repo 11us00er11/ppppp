@@ -1,19 +1,23 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional
+import base64, hashlib, hmac
 
 import pymysql
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import (
-    JWTManager, create_access_token, jwt_required, get_jwt_identity
+    JWTManager, jwt_required, get_jwt_identity, verify_jwt_in_request
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
 from groq import Groq
+# 블루프린트: 인증은 auth.py로 통일 (/api/auth/...)
+# C:\flutterproject\gpt_server\routes\__init__.py (빈 파일) 만들어 두세요.
+from routes.auth import auth_bp   # ← routes 폴더에 auth.py가 있어야 함
 
 # -------------------------------
-# Env & App Config
+# App & Env
 # -------------------------------
 load_dotenv()
 
@@ -28,22 +32,33 @@ app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
 jwt = JWTManager(app)
 
 # CORS
-CORS(app,
-     resources={r"/api/*": {"origins": os.getenv("FRONTEND_ORIGIN", "*")}},
-     supports_credentials=True,
-     allow_headers=["Content-Type", "Authorization"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+origins_env = os.getenv("FRONTEND_ORIGIN", "*")
+origin_list = [o.strip() for o in origins_env.split(",") if o.strip()]
+_allow_all = (len(origin_list) == 1 and origin_list[0] == "*")
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "*" if _allow_all else origin_list}},
+    supports_credentials=False if _allow_all else True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+)
 
-# Groq (LLM)
+# 인증 블루프린트 등록 (/api/auth/signup, /api/auth/login, /api/auth/me)
+app.register_blueprint(auth_bp)  # auth.py 블루프린트(url_prefix="/api/auth")
+
+# -------------------------------
+# LLM (Groq)
+# -------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MODEL_NAME = os.getenv("GPT_MODEL", "llama-3.1-70b-versatile")
 SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "너는 마음을 어루만지는 챗봇이야.")
-
 if not GROQ_API_KEY:
     raise RuntimeError("GROQ_API_KEY 환경변수가 설정되지 않았습니다.")
 gclient = Groq(api_key=GROQ_API_KEY)
 
+# -------------------------------
 # DB
+# -------------------------------
 DB_CONF = dict(
     host=os.getenv("DB_HOST", "127.0.0.1"),
     user=os.getenv("DB_USER", "root"),
@@ -55,16 +70,47 @@ DB_CONF = dict(
     autocommit=True,
 )
 
-
 def get_conn():
     return pymysql.connect(**DB_CONF)
-
 
 # -------------------------------
 # Utils
 # -------------------------------
+def _b64decode_with_padding(s: str) -> bytes:
+    pad = "=" * (-len(s) % 4)
+    return base64.b64decode(s + pad)
+
+def verify_password_compat(stored_hash: str, password: str) -> bool:
+    """
+    (참고용) PBKDF2/werkzeug 기본 해시 체크 + scrypt 포맷 수동 검증
+    """
+    try:
+        if check_password_hash(stored_hash, password):
+            return True
+    except Exception:
+        pass
+
+    if stored_hash.startswith("scrypt:"):
+        try:
+            header, salt, hex_digest = stored_hash.split("$", 2)
+            _, n_s, r_s, p_s = header.split(":")
+            n, r, p = int(n_s), int(r_s), int(p_s)
+
+            salt_bytes = _b64decode_with_padding(salt)
+            dk = hashlib.scrypt(
+                password.encode("utf-8"),
+                salt=salt_bytes,
+                n=n, r=r, p=p,
+                maxmem=0,
+                dklen=len(bytes.fromhex(hex_digest)),
+            )
+            return hmac.compare_digest(dk, bytes.fromhex(hex_digest))
+        except Exception:
+            return False
+    return False
+
 def parse_dt(s: Optional[str]) -> Optional[str]:
-    """YYYY-MM-DD or YYYY-MM-DD HH:MM 형태를 MySQL DATETIME 문자열로 정규화"""
+    """YYYY-MM-DD or YYYY-MM-DD HH:MM → 'YYYY-MM-DD HH:MM:SS'"""
     if not s:
         return None
     s = s.strip()
@@ -75,7 +121,6 @@ def parse_dt(s: Optional[str]) -> Optional[str]:
             continue
     return None
 
-
 # -------------------------------
 # Health
 # -------------------------------
@@ -83,83 +128,21 @@ def parse_dt(s: Optional[str]) -> Optional[str]:
 def health():
     return jsonify(ok=True, model=MODEL_NAME, time=datetime.utcnow().isoformat() + "Z")
 
-
 # -------------------------------
-# Auth
-# 테이블: users(id, user_id, user_name, password_hash, created_at)
-# qurry.sql의 예시 해시가 scrypt 형식일 수 있습니다.
-# - Werkzeug의 check_password_hash로 검증을 시도하되,
-#   형식 불일치 시 False를 돌려 "아이디/비번 오류"로 처리합니다.
-# -------------------------------
-@app.post("/api/auth/signup")
-def signup():
-    data = request.get_json(silent=True) or {}
-    user_id = (data.get("user_id") or "").strip()
-    user_name = (data.get("user_name") or "").strip()
-    password = (data.get("password") or "").strip()
-
-    if not user_id or not user_name or not password:
-        return jsonify(error="user_id, user_name, password가 필요합니다."), 400
-
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id FROM users WHERE user_id=%s", (user_id,))
-        if cur.fetchone():
-            return jsonify(error="이미 존재하는 user_id 입니다."), 409
-
-        # PBKDF2 해시 사용 (기본)
-        pw_hash = generate_password_hash(password)
-        cur.execute(
-            "INSERT INTO users (user_id, user_name, password_hash) VALUES (%s,%s,%s)",
-            (user_id, user_name, pw_hash),
-        )
-
-        cur.execute("SELECT id FROM users WHERE user_id=%s", (user_id,))
-        row = cur.fetchone()
-
-    token = create_access_token(identity={"user_pk": row["id"], "user_id": user_id, "user_name": user_name})
-    return jsonify(access_token=token, user={"user_id": user_id, "user_name": user_name})
-
-
-@app.post("/api/auth/login")
-def login():
-    data = request.get_json(silent=True) or {}
-    user_id = (data.get("user_id") or "").strip()
-    password = (data.get("password") or "").strip()
-    if not user_id or not password:
-        return jsonify(error="user_id, password가 필요합니다."), 400
-
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id, user_id, user_name, password_hash FROM users WHERE user_id=%s", (user_id,))
-        row = cur.fetchone()
-
-    if not row:
-        return jsonify(error="아이디 또는 비밀번호가 올바르지 않습니다."), 401
-
-    stored = row["password_hash"] or ""
-    ok = False
-    try:
-        ok = check_password_hash(stored, password)
-    except Exception:
-        ok = False  # 해시 포맷 불일치 등
-
-    if not ok:
-        # 만약 기존에 '데모 로그인'을 쓰셨다면, 아래를 임시로 허용할 수 있습니다.
-        # if password == "pass": ok = True
-        return jsonify(error="아이디 또는 비밀번호가 올바르지 않습니다."), 401
-
-    token = create_access_token(identity={"user_pk": row["id"], "user_id": row["user_id"], "user_name": row["user_name"]})
-    return jsonify(access_token=token, user={"user_id": row["user_id"], "user_name": row["user_name"]})
-
-
-# -------------------------------
-# Chat (Groq LLM)
+# Chat (선택 인증: 게스트 허용)
 # -------------------------------
 @app.post("/api/chat")
-@jwt_required()
 def chat():
-    uid = get_jwt_identity()  # {"user_pk","user_id","user_name"}
-    data = request.get_json(silent=True) or {}
+    # 토큰이 있으면 해석, 없어도 통과 → 게스트 허용
+    verify_jwt_in_request(optional=True)
+    # auth.py의 로그인은 identity=사용자 PK(int)로 발급하므로 int가 나옵니다.
+    ident = get_jwt_identity()
+    if isinstance(ident, int):
+        uid = {"user_pk": ident}
+    else:
+        uid = {"user_pk": None, "role": "guest"}
 
+    data = request.get_json(silent=True) or {}
     user_message = (data.get("message") or "").strip()
     history = data.get("history") or []  # [{role:"user"|"assistant", content:"..."}]
     if not user_message:
@@ -185,38 +168,25 @@ def chat():
     except Exception as e:
         return jsonify(error=str(e)), 500
 
-# -------------------------------
-# CORS Preflight (OPTIONS)
-# -------------------------------
-@app.route("/api/diary", methods=["OPTIONS"])
-@app.route("/api/diary/", methods=["OPTIONS"])
-def diary_options():
-    return ("", 204)
-
-@app.route("/api/diary/<int:_id>", methods=["OPTIONS"])
-def diary_item_options(_id):
-    return ("", 204)
-
-# Chat
+# 프리플라이트(OPTIONS)
 @app.route("/api/chat", methods=["OPTIONS"])
 def _chat_options():
     return ("", 204)
+
 # -------------------------------
-# Emotion Diary
-# 테이블: emotion_diary(id, user_pk, mood, notes, created_at, updated_at, deleted_at)
+# Emotion Diary (로그인 필수)
+#  - auth.py 로그인 토큰은 identity=정수(사용자 PK) 입니다.
+#  - 따라서 get_jwt_identity() → int 를 user_pk로 사용하세요.
 # -------------------------------
 @app.get("/api/diary")
 @jwt_required()
 def diary_list():
-    uid = get_jwt_identity()
-    user_pk = uid["user_pk"]
-
+    user_pk = get_jwt_identity()   # int
     mood = (request.args.get("mood") or "").strip() or None
     q = (request.args.get("q") or "").strip() or None
     dt_from = parse_dt(request.args.get("from"))
     dt_to = parse_dt(request.args.get("to"))
 
-    # ✅ page_size와 size 둘 다 지원
     page = max(1, int(request.args.get("page", "1")))
     size_param = request.args.get("size", request.args.get("page_size", "20"))
     size = min(100, max(1, int(size_param)))
@@ -261,14 +231,11 @@ def diary_list():
         pages=(total + size - 1) // size
     )
 
-
 @app.post("/api/diary")
 @jwt_required()
 def diary_create():
-    uid = get_jwt_identity()
-    user_pk = uid["user_pk"]
+    user_pk = get_jwt_identity()  # int
     data = request.get_json(silent=True) or {}
-
     mood = (data.get("mood") or "").strip()
     notes = (data.get("notes") or None)
 
@@ -288,14 +255,11 @@ def diary_create():
 
     return jsonify(item=row), 201
 
-
 @app.put("/api/diary/<int:diary_id>")
 @jwt_required()
 def diary_update(diary_id: int):
-    uid = get_jwt_identity()
-    user_pk = uid["user_pk"]
+    user_pk = get_jwt_identity()  # int
     data = request.get_json(silent=True) or {}
-
     mood = (data.get("mood") or "").strip() or None
     notes = (data.get("notes") or None)
 
@@ -315,13 +279,10 @@ def diary_update(diary_id: int):
 
     return jsonify(item=row)
 
-
 @app.delete("/api/diary/<int:diary_id>")
 @jwt_required()
 def diary_delete(diary_id: int):
-    uid = get_jwt_identity()
-    user_pk = uid["user_pk"]
-
+    user_pk = get_jwt_identity()  # int
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE emotion_diary SET deleted_at=NOW() WHERE id=%s AND user_pk=%s AND deleted_at IS NULL",
@@ -332,9 +293,19 @@ def diary_delete(diary_id: int):
 
     return jsonify(ok=True)
 
+# 프리플라이트(OPTIONS)
+@app.route("/api/diary", methods=["OPTIONS"])
+@app.route("/api/diary/", methods=["OPTIONS"])
+def diary_options():
+    return ("", 204)
+
+@app.route("/api/diary/<int:_id>", methods=["OPTIONS"])
+def diary_item_options(_id):
+    return ("", 204)
 
 # -------------------------------
 # Run
 # -------------------------------
 if __name__ == "__main__":
+    # 개발 시 0.0.0.0:5000
     app.run(host="0.0.0.0", port=5000)

@@ -1,5 +1,5 @@
 # db.py
-import pymysql
+import pymysql, os
 from config import DB_CONFIG
 
 def get_db_connection():
@@ -10,5 +10,6 @@ def get_db_connection():
         db=DB_CONFIG['database'],
         port=DB_CONFIG['port'],
         charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=True
     )

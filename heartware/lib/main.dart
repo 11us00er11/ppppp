@@ -4,6 +4,7 @@ import 'screens/chat_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/survey_screen.dart';
+import 'package:heartware/services/api_client.dart';
 
 void main() {
   runApp(MindTalkApp());
@@ -29,16 +30,24 @@ class MindTalkApp extends StatelessWidget {
         // ✅ /chat: arguments로 token, initialMessage 받기
         '/chat': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
-          final token = args?['token'] as String?;
+          String? token = args?['token'] as String?;
           final initialMessage = args?['initialMessage'] as String?;
-          if (token == null || token.isEmpty) {
-            return const Scaffold(
-              body: Center(child: Text('토큰 누락: 로그인 후 이용해주세요.')),
-            );
-          }
-          return ChatScreen(
-            token: token,
-            initialMessage: initialMessage,
+
+          return FutureBuilder<String>(
+            future: () async {
+              // 이미 토큰 있으면 그대로 사용
+              if (token != null && token.isNotEmpty) return token!;
+              // 없으면 게스트 토큰 발급
+              final resp = await ApiClient('http://127.0.0.1:5000')
+                  .post('/api/auth/guest');
+              return (resp['access_token'] as String);
+            }(),
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              }
+              return ChatScreen(token: snap.data!, initialMessage: initialMessage);
+            },
           );
         },
 
