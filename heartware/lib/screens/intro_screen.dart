@@ -64,7 +64,12 @@ class IntroScreenWithUser extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pushNamed(context, '/chat',
-                      arguments: {"displayName": displayName});
+                    arguments: {
+                      "displayName": displayName,
+                      "token": token ?? "",       // ✅ 로그인 X면 빈 문자열 전달
+                      "isGuest": (token == null || token!.isEmpty),
+                      "initialMessage": null,
+                    },);
                 },
                 icon: const Icon(Icons.chat_bubble_outline),
                 label: const Text("시작하기"),
@@ -110,7 +115,7 @@ class IntroScreenWithUser extends StatelessWidget {
                   Navigator.pushNamed(
                     context,
                     '/history',
-                    arguments: token,
+                    arguments: {"displayName": displayName, "token": token},
                   );
                 },
                 icon: const Icon(Icons.bar_chart),

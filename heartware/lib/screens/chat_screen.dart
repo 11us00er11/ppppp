@@ -21,6 +21,18 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Message> _messages = [];
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  String _token = '';
+  bool _isGuest = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    if (_token.isEmpty) {
+      _token = widget.token ?? (args?['token'] as String? ?? '');
+      _isGuest = (args?['isGuest'] as bool?) ?? _token.isEmpty;
+    }
+  }
 
   String _getCurrentTime() {
     final now = DateTime.now();
@@ -133,11 +145,19 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     try {
-      String responseText = await GPTService.sendMessage(
-        input,
-        token: widget.token ?? '', // ✅ 여기서 token 전달
-      );
+      final responseText = await GPTService
+          .sendMessage(input, token: _token)
+          .timeout(const Duration(seconds: 12));
+
       _animateBotResponse(responseText, loadingIndex, loadingTime);
+    } on TimeoutException {
+      setState(() {
+        _messages[loadingIndex] = Message(
+          text: "오류: 서버 응답 시간이 초과되었습니다. 네트워크/서버를 확인해주세요.",
+          time: loadingTime,
+          role: "bot",
+        );
+      });
     } catch (e) {
       setState(() {
         _messages[loadingIndex] = Message(
@@ -163,8 +183,6 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)!.settings.arguments as Map?;
-    final String token = (args?['token'] as String?) ?? '';
-    final String? displayName = args?['displayName'] as String?;
 
     return Scaffold(
       resizeToAvoidBottomInset: true,

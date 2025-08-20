@@ -5,8 +5,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import timedelta
 from flask_cors import cross_origin
 import re, pymysql
-
-# 중요: gpt_server.py에 이미 get_conn 정의됨
 from db import get_conn  # ← 이걸로 통일
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")

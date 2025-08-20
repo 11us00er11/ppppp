@@ -72,8 +72,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
               final name = (widget.displayName ?? '').trim();
               final intro = name.isNotEmpty ? '$name님, ' : '';
-              final initial = '''
-              ${intro}자가 진단 결과를 공유할게요.
+              final initial = '''${intro}자가 진단 결과를 공유할게요.
               - 총점: $_totalScore / 15
               - 해석: $_resultMessage
               ''';
