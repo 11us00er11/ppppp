@@ -1,18 +1,20 @@
+// services/diary_service.dart
 import '../services/api_client.dart';
 
 class DiaryService {
-  final ApiClient api;
-  DiaryService(this.api);
+  final ApiClient _api;
+  DiaryService(this._api);
 
-  Future<dynamic> list(Map<String, String> qp) async {
-    return await api.get('/api/diary', params: qp);
+  Future<Map<String, dynamic>> list(Map<String, String> params) async {
+    // /history? page, size, from, to, q, mood=... (CSV)
+    return await _api.get('/history', params: params) as Map<String, dynamic>;
   }
 
-  Future<dynamic> create(Map<String, dynamic> body) async {
-    return await api.post('/api/diary', body: body);
+  Future<Map<String, dynamic>> create(Map<String, dynamic> body) async {
+    return await _api.post('/history', body: body) as Map<String, dynamic>;
   }
 
   Future<void> delete(int id) async {
-    await api.delete('/api/diary/$id');
+    await _api.delete('/history/$id');
   }
 }

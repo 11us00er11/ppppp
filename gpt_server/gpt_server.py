@@ -179,7 +179,7 @@ def _chat_options():
 #  - auth.py 로그인 토큰은 identity=정수(사용자 PK) 입니다.
 #  - 따라서 get_jwt_identity() → int 를 user_pk로 사용하세요.
 # -------------------------------
-@app.get("/api/diary")
+@app.get("/api/history")
 @jwt_required()
 def diary_list():
     user_pk = get_jwt_identity()   # int
@@ -232,7 +232,7 @@ def diary_list():
         pages=(total + size - 1) // size
     )
 
-@app.post("/api/diary")
+@app.post("/api/history")
 @jwt_required()
 def diary_create():
     user_pk = get_jwt_identity()  # int
@@ -256,7 +256,7 @@ def diary_create():
 
     return jsonify(item=row), 201
 
-@app.put("/api/diary/<int:diary_id>")
+@app.put("/api/history/<int:diary_id>")
 @jwt_required()
 def diary_update(diary_id: int):
     user_pk = get_jwt_identity()  # int
@@ -280,7 +280,7 @@ def diary_update(diary_id: int):
 
     return jsonify(item=row)
 
-@app.delete("/api/diary/<int:diary_id>")
+@app.delete("/api/history/<int:diary_id>")
 @jwt_required()
 def diary_delete(diary_id: int):
     user_pk = get_jwt_identity()  # int
@@ -295,14 +295,33 @@ def diary_delete(diary_id: int):
     return jsonify(ok=True)
 
 # 프리플라이트(OPTIONS)
-@app.route("/api/diary", methods=["OPTIONS"])
-@app.route("/api/diary/", methods=["OPTIONS"])
+@app.route("/api/history", methods=["OPTIONS"])
+@app.route("/api/history/", methods=["OPTIONS"])
 def diary_options():
     return ("", 204)
 
-@app.route("/api/diary/<int:_id>", methods=["OPTIONS"])
+@app.route("/api/history/<int:_id>", methods=["OPTIONS"])
 def diary_item_options(_id):
     return ("", 204)
+
+@app.after_request
+def _add_cors_headers(resp):
+    # /api/* 만 타겟
+    if request.path.startswith("/api/"):
+        origin = request.headers.get("Origin", "")
+        # 1) *. 개발 편의: 와일드카드 (쿠키 안 쓸 때)
+        resp.headers.setdefault("Access-Control-Allow-Origin", "*")
+        # 2) 또는 특정 오리진만 허용하려면 아래처럼:
+        # if origin in {"http://localhost:3000", "http://127.0.0.1:3000"}:
+        #     resp.headers["Access-Control-Allow-Origin"] = origin
+
+        resp.headers.setdefault("Vary", "Origin")
+        resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        # Authorization, Content-Type 둘 다 포함!
+        resp.headers.setdefault("Access-Control-Allow-Headers", "Authorization, Content-Type")
+        # 쿠키 안 쓰면 False 유지
+        # resp.headers.setdefault("Access-Control-Allow-Credentials", "false")
+    return resp
 
 # -------------------------------
 # Run

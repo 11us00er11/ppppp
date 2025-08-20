@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/api_client.dart';
 import '../services/diary_service.dart';
 import 'package:provider/provider.dart';
 import '../repositories/diary_repository.dart';
@@ -7,16 +6,28 @@ import '../viewmodels/history_view_model.dart';
 import '../widgets/diary_list_item.dart';
 import '../widgets/diary_filter_sheet.dart';
 import '../widgets/diary_editor_sheet.dart';
+import '../services/auth_storage.dart';
 
 class HistoryScreen extends StatelessWidget {
-  final String token;
-  const HistoryScreen({super.key, required this.token});
+  const HistoryScreen({super.key});
+
+  Future<bool> _hasToken() async {
+    final t = await getStoredToken();
+    return t != null && t.isNotEmpty;
+  }
 
   @override
   Widget build(BuildContext context) {
+
     return ChangeNotifierProvider(
       create: (_) => HistoryViewModel(
-        DiaryRepository(DiaryService(ApiClient(token))),
+        DiaryRepository(DiaryService(apiClient)),
+        onUnauthorized: () async {
+          await clearStoredToken();
+          if (context.mounted) {
+            Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+          }
+        },
       )..refresh(),
       child: const _HistoryView(),
     );
