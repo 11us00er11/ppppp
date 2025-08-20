@@ -12,9 +12,10 @@ from flask_jwt_extended import (
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
 from groq import Groq
+from db import get_conn
+from routes.auth import auth_bp
 # 블루프린트: 인증은 auth.py로 통일 (/api/auth/...)
 # C:\flutterproject\gpt_server\routes\__init__.py (빈 파일) 만들어 두세요.
-from routes.auth import auth_bp   # ← routes 폴더에 auth.py가 있어야 함
 
 # -------------------------------
 # App & Env

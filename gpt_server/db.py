@@ -1,15 +1,20 @@
 # db.py
-import pymysql, os
-from config import DB_CONFIG
+import os
+import pymysql
+from dotenv import load_dotenv
 
-def get_db_connection():
-    return pymysql.connect(
-        host=DB_CONFIG['host'],
-        user=DB_CONFIG['user'],
-        password=DB_CONFIG['password'],
-        db=DB_CONFIG['database'],
-        port=DB_CONFIG['port'],
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True
-    )
+load_dotenv()
+
+DB_CONF = dict(
+    host=os.getenv("DB_HOST", "127.0.0.1"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD", "aaaa"),
+    database=os.getenv("DB_NAME", "gpt_app"),
+    port=int(os.getenv("DB_PORT", "3306")),
+    charset="utf8mb4",
+    cursorclass=pymysql.cursors.DictCursor,
+    autocommit=True,
+)
+
+def get_conn():
+    return pymysql.connect(**DB_CONF)
