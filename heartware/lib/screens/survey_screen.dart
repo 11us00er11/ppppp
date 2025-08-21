@@ -8,7 +8,6 @@ class SurveyScreen extends StatefulWidget {
   const SurveyScreen({
     required this.token,
     this.displayName,
-    super.key,
   });
 
   @override

@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 import base64, hashlib, hmac
-
+from db import get_conn
 import pymysql
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -12,11 +12,7 @@ from flask_jwt_extended import (
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
 from groq import Groq
-from db import get_conn
 from routes.auth import auth_bp
-# 블루프린트: 인증은 auth.py로 통일 (/api/auth/...)
-# C:\flutterproject\gpt_server\routes\__init__.py (빈 파일) 만들어 두세요.
-
 # -------------------------------
 # App & Env
 # -------------------------------
@@ -44,8 +40,7 @@ CORS(
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 )
 
-# 인증 블루프린트 등록 (/api/auth/signup, /api/auth/login, /api/auth/me)
-app.register_blueprint(auth_bp)  # auth.py 블루프린트(url_prefix="/api/auth")
+app.register_blueprint(auth_bp)
 
 # -------------------------------
 # LLM (Groq)
@@ -71,9 +66,6 @@ DB_CONF = dict(
     autocommit=True,
 )
 
-def get_conn():
-    return pymysql.connect(**DB_CONF)
-
 # -------------------------------
 # Utils
 # -------------------------------
@@ -82,9 +74,6 @@ def _b64decode_with_padding(s: str) -> bytes:
     return base64.b64decode(s + pad)
 
 def verify_password_compat(stored_hash: str, password: str) -> bool:
-    """
-    (참고용) PBKDF2/werkzeug 기본 해시 체크 + scrypt 포맷 수동 검증
-    """
     try:
         if check_password_hash(stored_hash, password):
             return True
@@ -111,7 +100,6 @@ def verify_password_compat(stored_hash: str, password: str) -> bool:
     return False
 
 def parse_dt(s: Optional[str]) -> Optional[str]:
-    """YYYY-MM-DD or YYYY-MM-DD HH:MM → 'YYYY-MM-DD HH:MM:SS'"""
     if not s:
         return None
     s = s.strip()
@@ -121,22 +109,12 @@ def parse_dt(s: Optional[str]) -> Optional[str]:
         except ValueError:
             continue
     return None
-
-# -------------------------------
-# Health
-# -------------------------------
-@app.get("/api/health")
-def health():
-    return jsonify(ok=True, model=MODEL_NAME, time=datetime.utcnow().isoformat() + "Z")
-
 # -------------------------------
 # Chat (선택 인증: 게스트 허용)
 # -------------------------------
 @app.post("/api/chat")
 def chat():
-    # 토큰이 있으면 해석, 없어도 통과 → 게스트 허용
     verify_jwt_in_request(optional=True)
-    # auth.py의 로그인은 identity=사용자 PK(int)로 발급하므로 int가 나옵니다.
     ident = get_jwt_identity()
     if isinstance(ident, int):
         uid = {"user_pk": ident}
@@ -145,7 +123,7 @@ def chat():
 
     data = request.get_json(silent=True) or {}
     user_message = (data.get("message") or "").strip()
-    history = data.get("history") or []  # [{role:"user"|"assistant", content:"..."}]
+    history = data.get("history") or []
     if not user_message:
         return jsonify(error="message가 필요합니다."), 400
 
@@ -169,7 +147,6 @@ def chat():
     except Exception as e:
         return jsonify(error=str(e)), 500
 
-# 프리플라이트(OPTIONS)
 @app.route("/api/chat", methods=["OPTIONS"])
 def _chat_options():
     return ("", 204)
@@ -182,7 +159,7 @@ def _chat_options():
 @app.get("/api/history")
 @jwt_required()
 def diary_list():
-    user_pk = get_jwt_identity()   # int
+    user_pk = get_jwt_identity()  # int
     mood = (request.args.get("mood") or "").strip() or None
     q = (request.args.get("q") or "").strip() or None
     dt_from = parse_dt(request.args.get("from"))
@@ -196,17 +173,13 @@ def diary_list():
     where = ["user_pk=%s", "deleted_at IS NULL"]
     params = [user_pk]
     if mood:
-        where.append("mood=%s")
-        params.append(mood)
+        where.append("mood=%s"); params.append(mood)
     if q:
-        where.append("(notes LIKE %s)")
-        params.append(f"%{q}%")
+        where.append("(notes LIKE %s)"); params.append(f"%{q}%")
     if dt_from:
-        where.append("created_at >= %s")
-        params.append(dt_from)
+        where.append("created_at >= %s"); params.append(dt_from)
     if dt_to:
-        where.append("created_at <= %s")
-        params.append(dt_to)
+        where.append("created_at <= %s"); params.append(dt_to)
 
     where_sql = " AND ".join(where)
     sql = f"""
@@ -219,23 +192,33 @@ def diary_list():
 
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(sql, (*params, size, offset))
-        items = cur.fetchall()
+        rows = cur.fetchall()
 
         cur.execute(f"SELECT COUNT(*) AS cnt FROM emotion_diary WHERE {where_sql}", params)
         total = cur.fetchone()["cnt"]
 
+    safe_items = []
+    for r in rows:
+        safe_items.append({
+            "id": r["id"],
+            "mood": (r.get("mood") or ""),
+            "notes": (r.get("notes") or ""),
+            "createdAt": r["created_at"].strftime("%Y-%m-%d %H:%M:%S") if r.get("created_at") else None,
+            "updatedAt": r["updated_at"].strftime("%Y-%m-%d %H:%M:%S") if r.get("updated_at") else None,
+        })
+
     return jsonify(
-        items=items,
+        items=safe_items,
         page=page,
         size=size,
         total=total,
         pages=(total + size - 1) // size
-    )
+    ), 200
 
 @app.post("/api/history")
 @jwt_required()
 def diary_create():
-    user_pk = get_jwt_identity()  # int
+    user_pk = get_jwt_identity()
     data = request.get_json(silent=True) or {}
     mood = (data.get("mood") or "").strip()
     notes = (data.get("notes") or None)
@@ -259,7 +242,7 @@ def diary_create():
 @app.put("/api/history/<int:diary_id>")
 @jwt_required()
 def diary_update(diary_id: int):
-    user_pk = get_jwt_identity()  # int
+    user_pk = get_jwt_identity()
     data = request.get_json(silent=True) or {}
     mood = (data.get("mood") or "").strip() or None
     notes = (data.get("notes") or None)
@@ -283,7 +266,7 @@ def diary_update(diary_id: int):
 @app.delete("/api/history/<int:diary_id>")
 @jwt_required()
 def diary_delete(diary_id: int):
-    user_pk = get_jwt_identity()  # int
+    user_pk = get_jwt_identity()
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE emotion_diary SET deleted_at=NOW() WHERE id=%s AND user_pk=%s AND deleted_at IS NULL",
@@ -294,7 +277,6 @@ def diary_delete(diary_id: int):
 
     return jsonify(ok=True)
 
-# 프리플라이트(OPTIONS)
 @app.route("/api/history", methods=["OPTIONS"])
 @app.route("/api/history/", methods=["OPTIONS"])
 def diary_options():
@@ -306,26 +288,30 @@ def diary_item_options(_id):
 
 @app.after_request
 def _add_cors_headers(resp):
-    # /api/* 만 타겟
     if request.path.startswith("/api/"):
         origin = request.headers.get("Origin", "")
-        # 1) *. 개발 편의: 와일드카드 (쿠키 안 쓸 때)
         resp.headers.setdefault("Access-Control-Allow-Origin", "*")
-        # 2) 또는 특정 오리진만 허용하려면 아래처럼:
-        # if origin in {"http://localhost:3000", "http://127.0.0.1:3000"}:
-        #     resp.headers["Access-Control-Allow-Origin"] = origin
-
         resp.headers.setdefault("Vary", "Origin")
         resp.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        # Authorization, Content-Type 둘 다 포함!
         resp.headers.setdefault("Access-Control-Allow-Headers", "Authorization, Content-Type")
-        # 쿠키 안 쓰면 False 유지
-        # resp.headers.setdefault("Access-Control-Allow-Credentials", "false")
     return resp
+app.config["JWT_TOKEN_LOCATION"] = ["headers"]
+app.config["JWT_HEADER_NAME"] = "Authorization"
+app.config["JWT_HEADER_TYPE"] = "Bearer"
 
+@jwt.unauthorized_loader
+def _unauth_loader(reason):
+    return jsonify(error="unauthorized", reason=reason), 401
+
+@jwt.invalid_token_loader
+def _invalid_loader(reason):
+    return jsonify(error="invalid_token", reason=reason), 401
+
+@jwt.expired_token_loader
+def _expired_loader(jwt_header, jwt_payload):
+    return jsonify(error="token_expired"), 401
 # -------------------------------
 # Run
 # -------------------------------
 if __name__ == "__main__":
-    # 개발 시 0.0.0.0:5000
     app.run(host="0.0.0.0", port=5000)

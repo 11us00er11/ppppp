@@ -5,7 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import timedelta
 from flask_cors import cross_origin
 import re, pymysql
-from db import get_conn  # ← 이걸로 통일
+from db import get_conn
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 NAME_RE = re.compile(r'^[A-Za-z가-힣\s\-]{2,30}$')
@@ -14,9 +14,8 @@ def _json():
     return request.get_json(silent=True) or {}
 
 def _success_payload(uid: int, user_id: str, user_name: str, status=200):
-    # JWT에 user_pk까지 싣는다 (login_screen.dart가 이 키를 찾음)
     access = create_access_token(
-        identity=uid,  # diary API가 int identity를 기대함
+        identity=uid,
         additional_claims={"user_id": user_id, "user_name": user_name, "user_pk": uid},
         expires_delta=timedelta(hours=24),
     )
@@ -50,7 +49,6 @@ def signup():
     if len(password) < 8:
         return jsonify(ok=False, message="비밀번호는 8자 이상이어야 합니다."), 400
 
-    # DB의 샘플 사용자들이 scrypt 해시이므로 scrypt로 통일해야 로그인 성공함
     pwd_hash = generate_password_hash(password, method="scrypt")
 
     conn = get_conn()
@@ -99,16 +97,24 @@ def login():
     finally:
         conn.close()
 
-    # scrypt 해시와 일치하도록 check_password_hash 사용 (DB 초기 데이터도 scrypt)
     if not row or not check_password_hash(row["password_hash"], password):
         return jsonify(ok=False, message="아이디 또는 비밀번호가 잘못되었습니다."), 401
 
     return _success_payload(row["id"], row["user_id"], row["user_name"], status=200)
 
+@auth_bp.post("/guest")
+def guest():
+    access = create_access_token(
+        identity=0,
+        additional_claims={"user_id":"guest","user_name":"게스트","user_pk":0},
+        expires_delta=timedelta(hours=1),
+    )
+    return jsonify(ok=True, access_token=access), 200
+
 @auth_bp.get("/me")
 @jwt_required()
 def me():
-    uid = get_jwt_identity()   # int여야 diary 접근 가능
+    uid = get_jwt_identity()
     if not isinstance(uid, int):
         return jsonify(ok=False, message="게스트는 사용자 정보가 없습니다."), 403
 

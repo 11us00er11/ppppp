@@ -1,6 +1,6 @@
 # chat.py
 from flask import Blueprint, request, jsonify
-from services.openai_service import get_chat_response  # 파일명은 유지하되 내부는 Groq 사용
+from services.openai_service import get_chat_response
 import logging
 import time
 
@@ -30,7 +30,6 @@ def chat():
 
     except Exception as e:
         logging.exception("서버 오류")
-        # Groq SDK는 OpenAI처럼 세분화된 예외 타입이 많지 않으므로 일반 처리
         msg = str(e)
         status = 429 if "rate" in msg.lower() else 500
         return jsonify({"error": "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}), status

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/diary_entry.dart';
 import '../repositories/diary_repository.dart';
-import '../services/api_client.dart'; // UnauthorizedException 정의 위치
+import '../services/api_client.dart';
 
 class HistoryViewModel extends ChangeNotifier {
   final DiaryRepository repo;
@@ -35,26 +35,24 @@ class HistoryViewModel extends ChangeNotifier {
     try {
       final list = await repo.list(
         page: _page,
-        pageSize: _pageSize,                 // Repo에서 size로 변환
+        pageSize: _pageSize,
         from: from == null ? null : _ymd(from!),
         to:   to   == null ? null : _ymd(to!),
         moods: moods.isEmpty ? null : moods.toList(),
         q: query,
       );
       items.addAll(list);
-      hasMore = list.length == _pageSize;   // 또는 서버 pages 메타 사용
+      hasMore = list.length == _pageSize;
       _page += 1;
       lastError = null;
     } on UnauthorizedException {
       lastError = '세션이 만료되었거나 로그인되지 않았습니다.';
       hasMore = false;
-      onUnauthorized?.call(); // 로그인 화면으로 유도
-      rethrow; // 필요시 상위에서 스낵바 등
+      onUnauthorized?.call();
+      rethrow;
     } catch (e) {
-      // 네트워크/서버 일반 에러
       lastError = e.toString();
       hasMore = false;
-      // 실패 시 hasMore는 건드리지 않아 다음에 재시도 가능
     } finally {
       loading = false; notifyListeners();
     }
@@ -99,7 +97,6 @@ class HistoryViewModel extends ChangeNotifier {
     }
     notifyListeners();
     if (autoRefresh) {
-      // 필터 적용 즉시 새로고침 (중복 호출 방지를 위해 loading 가드가 이미 있음)
       refresh();
     }
   }

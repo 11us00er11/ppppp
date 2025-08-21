@@ -10,7 +10,6 @@ class IntroScreenWithUser extends StatelessWidget {
     required this.user_id,
     this.displayName,
     this.token,
-    super.key,
   });
 
   @override
@@ -66,7 +65,7 @@ class IntroScreenWithUser extends StatelessWidget {
                   Navigator.pushNamed(context, '/chat',
                     arguments: {
                       "displayName": displayName,
-                      "token": token ?? "",       // ✅ 로그인 X면 빈 문자열 전달
+                      "token": token ?? "",
                       "isGuest": (token == null || token!.isEmpty),
                       "initialMessage": null,
                     },);
@@ -91,7 +90,7 @@ class IntroScreenWithUser extends StatelessWidget {
                     '/survey',
                     arguments: {
                       "token": token,
-                      'displayName': displayName, // 이름도 같이 전달
+                      'displayName': displayName,
                     },
                   );
                 },

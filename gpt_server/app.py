@@ -42,11 +42,6 @@ def get_conn():
         cursorclass=pymysql.cursors.DictCursor,
     )
 
-# -------------------------------------------------------------------
-#  Auth (데모용): 실제 비번 검증 로직은 프로젝트의 해시방식에 맞게 교체하세요.
-#  - qurry.txt의 users 테이블: (user_id, user_name, password_hash)
-#  - 여기서는 데모로 비밀번호 'pass'면 통과시킵니다.
-# -------------------------------------------------------------------
 @app.route("/api/auth/login", methods=["POST"])
 def login():
     data = request.get_json(force=True) or {}
@@ -60,8 +55,6 @@ def login():
         cur.execute("SELECT id, user_id, user_name, password_hash FROM users WHERE user_id=%s", (user_id,))
         row = cur.fetchone()
 
-    # TODO: 실제로는 row["password_hash"]와 입력 비번을 검증하세요.
-    # (passlib 등으로 scrypt/pbkdf2 해시 검증. 여기선 데모로 'pass'만 허용)
     if not row or password != "pass":
         return jsonify({"error": "아이디 또는 비밀번호가 올바르지 않습니다."}), 401
 
@@ -95,7 +88,7 @@ def chat():
         completion = gclient.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
-            temperature=0.8,  # 공감/따뜻한 톤 강화
+            temperature=0.8,
             max_tokens=1024,
         )
         reply = completion.choices[0].message.content
@@ -124,7 +117,6 @@ def diary():
             )
         return jsonify({"ok": True})
 
-    # GET
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT id, mood, notes, created_at, updated_at FROM emotion_diary WHERE user_pk=%s AND deleted_at IS NULL ORDER BY created_at DESC",

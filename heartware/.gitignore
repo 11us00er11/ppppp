@@ -1,6 +1,7 @@
 # 환경설정
 .env
 .env.*
+qurry.txt
 
 # IDE 설정
 .idea/

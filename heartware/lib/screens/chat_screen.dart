@@ -8,9 +8,9 @@ import 'dart:async';
 const int typingSpeedMs = 60;
 
 class ChatScreen extends StatefulWidget {
-  final String? token;              // was: final String token;
+  final String? token;
   final String? initialMessage;
-  ChatScreen({this.token, this.initialMessage});  // was: required this.token
+  ChatScreen({this.token, this.initialMessage});
 
   @override
   _ChatScreenState createState() => _ChatScreenState();

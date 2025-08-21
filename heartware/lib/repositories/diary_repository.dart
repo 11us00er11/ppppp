@@ -15,7 +15,7 @@ class DiaryRepository {
   }) async {
     final params = {
       'page': '$page',
-      'size': '$pageSize', // 서버는 size 사용
+      'size': '$pageSize',
       if (from != null) 'from': from,
       if (to != null) 'to': to,
       if (q?.isNotEmpty == true) 'q': q!,

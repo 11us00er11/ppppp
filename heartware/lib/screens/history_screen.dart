@@ -6,15 +6,10 @@ import '../viewmodels/history_view_model.dart';
 import '../widgets/diary_list_item.dart';
 import '../widgets/diary_filter_sheet.dart';
 import '../widgets/diary_editor_sheet.dart';
-import '../services/auth_storage.dart';
+import 'package:heartware/main.dart' show clearStoredToken, apiClient;
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
-
-  Future<bool> _hasToken() async {
-    final t = await getStoredToken();
-    return t != null && t.isNotEmpty;
-  }
 
   @override
   Widget build(BuildContext context) {

@@ -3,9 +3,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from db import get_db_connection
 
-# 슬래시 유연 처리
 diary_bp = Blueprint("diary", __name__, strict_slashes=False)
-
 def _row_to_dict(row):
     return {
         "id": row[0],
@@ -16,7 +14,6 @@ def _row_to_dict(row):
         "updated_at": row[5].isoformat() if row[5] else None,
     }
 
-# ✔ 컬렉션 엔드포인트: ''와 '/' 둘 다 매칭 + OPTIONS 포함
 @diary_bp.route("",  methods=["GET", "POST", "OPTIONS"])
 @diary_bp.route("/", methods=["GET", "POST", "OPTIONS"])
 @jwt_required()
@@ -51,7 +48,6 @@ def diary_collection():
         finally:
             conn.close()
 
-    # GET
     page = max(int(request.args.get("page", 1)), 1)
     page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
     from_ = request.args.get("from")
@@ -98,7 +94,6 @@ def diary_collection():
     finally:
         conn.close()
 
-# ✔ 개별 리소스
 @diary_bp.route("/<int:diary_id>", methods=["DELETE", "OPTIONS"])
 @jwt_required()
 def diary_delete(diary_id):

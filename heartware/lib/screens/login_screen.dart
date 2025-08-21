@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:heartware/screens/intro_screen.dart';
 import 'signup_screen.dart';
+import 'package:heartware/main.dart' show saveStoredToken, apiClient;
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -10,7 +11,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _userIdController = TextEditingController();   // ← user_id
+  final _userIdController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
@@ -62,7 +63,6 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // 1) token 키 이름 호환 (access_token 우선)
       final token = (body['access_token'] ?? body['token'] ?? '') as String;
       if (token.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -71,7 +71,6 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // 2) user_pk 가져오기: body.user.user_pk -> JWT payload.user_pk -> 보정
       int userPk = -1;
 
       if (body['user'] is Map) {
@@ -88,10 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (v is String) userPk = int.tryParse(v) ?? userPk;
       }
 
-      // 토큰이 있는데도 userPk를 못 읽었으면 0으로 보정(게스트 오인 방지)
       if (userPk < 0 && token.isNotEmpty) userPk = 0;
-
-      // 3) displayName: body.user 우선, 없으면 JWT payload, 마지막으로 입력값
       String displayName = userId;
       if (body['user'] is Map) {
         final u = body['user'] as Map;
@@ -102,14 +98,16 @@ class _LoginScreenState extends State<LoginScreen> {
             (claims['user_name'] ?? claims['user_id'] ?? displayName).toString();
       }
 
-      // 4) 화면 이동 (token 존재 시 로그인 사용자로 취급)
+      await saveStoredToken(token);
+      apiClient;
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => IntroScreenWithUser(
-            user_id: userPk,          // 0 이상 보장
-            displayName: displayName, // null/빈값 방지됨
-            token: token,             // 비어있지 않음
+            user_id: userPk,
+            displayName: displayName,
+            token: token,
           ),
         ),
       );
@@ -156,8 +154,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 MaterialPageRoute(
                   builder: (_) => IntroScreenWithUser(
                     user_id: -1,
-                    displayName: '게스트',   // null 말고 안전한 문자열
-                    token: '',              // 필요하다면 빈 문자열
+                    displayName: '게스트',
+                    token: '',
                   ),
                 ),
               ),
